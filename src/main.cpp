@@ -40,11 +40,11 @@ int maxS = 255;
 int minV = 169;//92
 int maxV = 255;
 */
-int minR = 41;//131  // latest:103 255, 144, 255, 0, 255
+int minR = 41;  // latest:103 255, 144, 255, 0, 255
 int maxR = 255;
-int minG = 200;//128
+int minG = 200;
 int maxG = 255;
-int minB = 0;//92
+int minB = 0;
 int maxB = 125;
 #ifdef RPI
  bool USEIPCAM = false;
