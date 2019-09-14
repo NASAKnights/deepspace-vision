@@ -1,4 +1,4 @@
-#define RPI
+//#define RPI
 
 
 #include <stdio.h>
@@ -12,33 +12,31 @@
 #include <algorithm>
 #include <unistd.h>
 #include <pthread.h>
-#ifdef RPI
-  #include <include/constants_c.h>
-#else
-  #include </home/denis/FRC/openCV/laptop/opencv-4.0.0/modules/videoio/include/opencv2/videoio/legacy/constants_c.h>
-#endif
 #include <opencv2/highgui/highgui_c.h>
 #include <opencv2/core/core_c.h>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/types_c.h>
 #include "main.h"
+#include <include/constants_c.h>
 using namespace cv;
 using namespace std;
 
 #define MAXTARGETS 20
+#define ASIZE 10
 
 
 //Editable
 double MinRatio = 0.1;
 double MaxRatio = 0.65;
 int MaxDiff = 1000;
+
 /*
-int minH = 133;//131
-int maxH = 255;
-int minS = 255;//128
-int maxS = 255;
-int minV = 169;//92
-int maxV = 255;
+  int minH = 133;//131
+  int maxH = 255;
+  int minS = 255;//128
+  int maxS = 255;
+  int minV = 169;//92
+  int maxV = 255;
 */
 int minR = 41;  // latest:103 255, 144, 255, 0, 255
 int maxR = 255;
@@ -47,16 +45,17 @@ int maxG = 255;
 int minB = 0;
 int maxB = 125;
 #ifdef RPI
- bool USEIPCAM = false;
- bool SHOWO = false;
- bool SHOWT = false;
- bool SHOWTR = false;
+bool USEIPCAM = false;
+bool SHOWO = false;
+bool SHOWT = false;
+bool SHOWTR = false;
 #else
- bool USEIPCAM = false;
- bool SHOWO = true;
- bool SHOWT = true; 
- bool SHOWTR = true;
+bool USEIPCAM = false;
+bool SHOWO = true;
+bool SHOWT = true; 
+bool SHOWTR = true;
 #endif
+
 bool SideShow = true;
 bool AngleShow = true;
 bool AreaShow = true;
@@ -91,8 +90,8 @@ struct ProgParams
 
 //Functions
 /*
-void createTrackbars();
-void*VideoCap(void *args);
+  void createTrackbars();
+  void*VideoCap(void *args);
 */
 
 //Classes
@@ -154,7 +153,7 @@ void on_trackbar(int, void*)
 {
 }
 
- //--------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------
 
 void morphOps(Mat &thresh)
 {
@@ -363,13 +362,11 @@ void *VideoCap(void *args)
   cout << "success!" << endl;
   
   while (true){
-    //printf("wait new frame \n");
     pthread_mutex_lock(&frameMutex);
     vcap.read(frame);
     pthread_mutex_unlock(&frameMutex);
     newFrame = true;
     usleep(33000);
-    //usleep(1000000);
   }
 }
 
@@ -378,17 +375,16 @@ void *VideoCap(void *args)
 void calcTarget()
 {
   if (qdebug > 1){
-  if (tLeft->area > tRight->area)
-    cout << "turn left" << endl;
-  else 
-    cout << "turn right" << endl;
-  
-  if ((tLeft->center.x > FrameWidth/2-160 && tLeft->center.x < FrameWidth/2) && (tRight->center.x < FrameWidth/2+160 && tRight->center.x > FrameWidth/2))
-    cout << "stay on track" << endl;
-  else if (tLeft->center.x < FrameWidth/2)
-    cout << "move left" << endl;
-  else if (tRight->center.x > FrameWidth/2)
-    cout << "move right" << endl;
+    if (tLeft->area > tRight->area)
+      cout << "turn left" << endl;
+    else 
+      cout << "turn right" << endl;
+    if ((tLeft->center.x > FrameWidth/2-160 && tLeft->center.x < FrameWidth/2) && (tRight->center.x < FrameWidth/2+160 && tRight->center.x > FrameWidth/2))
+      cout << "stay on track" << endl;
+    else if (tLeft->center.x < FrameWidth/2)
+      cout << "move left" << endl;
+    else if (tRight->center.x > FrameWidth/2)
+      cout << "move right" << endl;
   }
   centerob.x = (tRight->center.x-tLeft->center.x)/2+tLeft->center.x;
   centerob.y = (tRight->center.y-tLeft->center.y)/2+tLeft->center.y;
@@ -404,28 +400,25 @@ void calcTarget()
 
 int main(int argc, const char* argv[])
 {
-  if (SHOWTR)createTrackbars();
+  if (SHOWTR) createTrackbars();
   ProgParams params;
   Position position;
   Position positionAV;
   vector<Position>::iterator it;
-#define ASIZE 10
   vector <Position>posA;
   Targets targets[MAXTARGETS];
   pthread_create(&tcpserver, NULL, opentcp, &positionAV);
   pthread_create(&MJPEG, NULL, VideoCap, &params);
   Mat img, HSV, thresholded, output;
-      position.x=0;
-      position.y=0;
-      position.z=0;
-      position.angle=0;
-      position.dist=0;
-      position.OffSetx=0;
-      position.OffSety=0;
-printf("enter main\n");
- while (true)
+  position.x=0;
+  position.y=0;
+  position.z=0;
+  position.angle=0;
+  position.dist=0;
+  position.OffSetx=0;
+  position.OffSety=0;
+  while (true)
     {
-      //printf("start thread lock \n");
       pthread_mutex_lock(&frameMutex);
       if(!frame.empty() && newFrame) //check it
 	{
@@ -472,10 +465,10 @@ printf("enter main\n");
 	    double shiftX=offsetX*KX/d00;
 	    if (d1<d2) x0=-x0;
 	    if (qdebug == -1){
-	    printf("==>  s= %.2f %.2f cs= %.2f %.2f  d^2=%.2f s0= %.2f %.2f\n"
-		   ,s1,s2,cs1,cs2,d1*d1,S0*KS*KS/(d1*d1),S0*KS*KS/(d1*d1));
-	    cout << "==>  x0= " << x0 << " z0= " << z0 << " d00= " << d00 << " al2= " << alpha << endl;
-	    printf("\n offset = %.2f  shift = %.2f \n",offsetX,shiftX);
+	      printf("==>  s= %.2f %.2f cs= %.2f %.2f  d^2=%.2f s0= %.2f %.2f\n"
+		     ,s1,s2,cs1,cs2,d1*d1,S0*KS*KS/(d1*d1),S0*KS*KS/(d1*d1));
+	      cout << "==>  x0= " << x0 << " z0= " << z0 << " d00= " << d00 << " al2= " << alpha << endl;
+	      printf("\n offset = %.2f  shift = %.2f \n",offsetX,shiftX);
 	    }
 	    dist = d00;
 	    if (d1<d2) 
@@ -492,17 +485,17 @@ printf("enter main\n");
 	    if(posA.size()>ASIZE){
 	      int i= 0;
 	      /*
-	      for(it = posA.begin(); it != posA.end(); it++,i++){
+		for(it = posA.begin(); it != posA.end(); it++,i++){
 		cout<< i << ": x = " << (*it).x << endl;
-	      }
+		}
 	      */
 	      //cout << "erase" << endl;
 	      posA.erase(posA.begin());
 	      i = 0;
 	      /*
-	      for(it = posA.begin(); it != posA.end(); it++,i++){
+		for(it = posA.begin(); it != posA.end(); it++,i++){
 		cout<< i << ": x = " << (*it).x << endl;
-	      }
+		}
 	      */
 	    }
 	    positionAV.x=0;
@@ -551,7 +544,7 @@ printf("enter main\n");
 	    }
 	  }else{
 	    //if (qdebug == -1) 
-cout << "failed nt = " << nt << endl;
+	    cout << "failed nt = " << nt << endl;
 	    positionAV.x=-1;
 	    positionAV.y=0;
 	    positionAV.z=-1;
@@ -575,10 +568,10 @@ cout << "failed nt = " << nt << endl;
 	  printf("------------------------------------------------------------\n");
 	  printf("X:%.2f, Y:%.2f, Z:%.2f, ang:%.2f, dist:%.2f, OffX:%.2f, OffY:%.2f\n",position.x, position.y, position.z, position.angle, position.dist, position.OffSetx, position.OffSety);
 	  printf("X:%.2f, Y:%.2f, Z:%.2f, ang:%.2f, dist:%.2f, OffX:%.2f, OffY:%.2f\n",positionAV.x, positionAV.y, positionAV.z, positionAV.angle, positionAV.dist, positionAV.OffSetx, positionAV.OffSety);
-	    if(position.x>10 || position.x<-10)
-	      printf("dist: %f alpha: %f\n",dist,alpha);
-	    printf("finished line\n");
-	//printf("distance: %0.2f\n",position.z);
+	  if(position.x>10 || position.x<-10)
+	    printf("dist: %f alpha: %f\n",dist,alpha);
+	  printf("finished line\n");
+	  //printf("distance: %0.2f\n",position.z);
 	  pthread_mutex_unlock(&targetMutex);
 	  totalfound.clear();
 	}
