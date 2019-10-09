@@ -1,6 +1,3 @@
-//#define RPI
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <opencv2/opencv.hpp>
@@ -18,6 +15,15 @@
 #include <opencv2/imgproc/types_c.h>
 #include "main.h"
 #include <include/constants_c.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <sys/ioctl.h>
+#include <net/if.h>
+#include <sys/time.h>
+//#include <signal.h>
+
+
+
 using namespace cv;
 using namespace std;
 
@@ -38,23 +44,22 @@ int MaxDiff = 1000;
   int minV = 169;//92
   int maxV = 255;
 */
-int minR = 41;  // latest:103 255, 144, 255, 0, 255
-int maxR = 255;
-int minG = 200;
-int maxG = 255;
-int minB = 0;
-int maxB = 125;
-#ifdef RPI
+int minR = 211; //127//41
+int maxR = 230;//132//255
+int minG = 219;//131//200
+int maxG = 255;//132//255
+int minB = 174; //131//0
+int maxB = 231;//132//125
+
 bool USEIPCAM = false;
 bool SHOWO = false;
-bool SHOWT = false;
+bool SHOWT = false; 
 bool SHOWTR = false;
-#else
-bool USEIPCAM = false;
-bool SHOWO = true;
-bool SHOWT = true; 
-bool SHOWTR = true;
-#endif
+bool USESERVER = false;
+bool USECOLOR = false;
+
+int counter = 0;
+struct timeval t1, t2;
 
 bool SideShow = true;
 bool AngleShow = true;
@@ -73,20 +78,24 @@ double FrameWidth;
 double FrameHeight;
 pthread_t MJPEG;
 pthread_t tcpserver;
+pthread_t videoServerThread;
 Point centerob;
 float dist;
 pthread_mutex_t frameMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t targetMutex = PTHREAD_MUTEX_INITIALIZER;
 const string trackbarWindowName = "Trackbars";
 Mat frame;
+
 vector <Point>totalfound;
 const Scalar BLUE = Scalar(255, 0, 0), RED = Scalar(0,0,255), YELLOW = Scalar(0,255,255);
 
 void *opentcp(void *arg);
+void *videoServer(void *arg);
 
-struct ProgParams
-{
-};
+int remoteSocket = 0;
+int videoPort;
+int videoError = 0;
+//#PARAMS
 
 //Functions
 /*
@@ -352,9 +361,12 @@ void *VideoCap(void *args)
     }
   }
   
-  vcap.set(CV_CAP_PROP_BRIGHTNESS, 1);
-  vcap.set(CV_CAP_PROP_CONTRAST, 0);
-  vcap.set(CV_CAP_PROP_AUTO_EXPOSURE, 0.25);
+  vcap.set(CV_CAP_PROP_BRIGHTNESS, 100);
+  //vcap.set(CV_CAP_PROP_CONTRAST, 100);
+  vcap.set(CV_CAP_PROP_AUTO_EXPOSURE, 255);
+  //vcap.set(CV_CAP_PROP_EXPOSURE, 255);
+  //vcap.set(CV_CAP_PROP_SATURATION, 100);
+  //vcap.set(CV_CAP_PROP_GAIN,0);
   FrameWidth = vcap.get(CV_CAP_PROP_FRAME_WIDTH);
   FrameHeight = vcap.get(CV_CAP_PROP_FRAME_HEIGHT);
   
@@ -394,22 +406,50 @@ void calcTarget()
 }
 
 
-//--------------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+
 
 
 
 int main(int argc, const char* argv[])
 {
+  //sigaction(SIGPIPE, &(struct sigaction){SIG_IGN}, NULL);
+  string args = argv[1];
+  vector<string> token;
+  for(int i=1;i<4;i++)
+    token.push_back(args.substr(i,1));
+  for(int i=0;i<token.size();i++){
+    if(token[i]=="c")
+      USECOLOR = true;
+    if(token[i]=="t")
+      SHOWTR = true;
+    if(token[i]=="s")
+      USESERVER = true;
+  }//add port arg
+  printf("State:\nUSECOLOR=%d\nSHOWTR=%d\nUSESERVER=%d\n",USECOLOR,SHOWTR,USESERVER);
+
+  gettimeofday(&t1, NULL);
+
+  videoPort=4097;
+  
   if (SHOWTR) createTrackbars();
-  ProgParams params;
   Position position;
   Position positionAV;
   vector<Position>::iterator it;
   vector <Position>posA;
   Targets targets[MAXTARGETS];
   pthread_create(&tcpserver, NULL, opentcp, &positionAV);
-  pthread_create(&MJPEG, NULL, VideoCap, &params);
+  pthread_create(&MJPEG, NULL, VideoCap, NULL);
+  if(USESERVER) pthread_create(&videoServerThread, NULL, videoServer, NULL);
   Mat img, HSV, thresholded, output;
+  //#remove
+  Mat imgGray;
+
+  if(!img.isContinuous()){
+    img = img.clone();
+    imgGray = img.clone();
+  }
+
   position.x=0;
   position.y=0;
   position.z=0;
@@ -565,19 +605,51 @@ int main(int argc, const char* argv[])
 	    imshow("Original", img);
 	  if(SHOWT)
 	    imshow("Thresholded", thresholded);
+	  if (qdebug > 2){
 	  printf("------------------------------------------------------------\n");
 	  printf("X:%.2f, Y:%.2f, Z:%.2f, ang:%.2f, dist:%.2f, OffX:%.2f, OffY:%.2f\n",position.x, position.y, position.z, position.angle, position.dist, position.OffSetx, position.OffSety);
 	  printf("X:%.2f, Y:%.2f, Z:%.2f, ang:%.2f, dist:%.2f, OffX:%.2f, OffY:%.2f\n",positionAV.x, positionAV.y, positionAV.z, positionAV.angle, positionAV.dist, positionAV.OffSetx, positionAV.OffSety);
 	  if(position.x>10 || position.x<-10)
 	    printf("dist: %f alpha: %f\n",dist,alpha);
-	  printf("finished line\n");
-	  //printf("distance: %0.2f\n",position.z);
+	  }
 	  pthread_mutex_unlock(&targetMutex);
 	  totalfound.clear();
 	}
       
       pthread_mutex_unlock(&frameMutex);
-      //printf("wait key\n");
+      counter++;
+      if(counter%10==0){
+	gettimeofday(&t2,NULL);
+	double dt = t2.tv_usec-t1.tv_usec+1000000 * (t2.tv_sec - t1.tv_sec);
+	t1=t2;
+	printf("------ Frame rate: %f fr/s \n",10./dt*1e6);
+	if(USESERVER && remoteSocket>0){
+	  //cvtColor(img,imgGray,6);
+	  int bytes = 0;
+	  
+
+	  if(USECOLOR && remoteSocket>0){
+	    int imgSize = img.total() * img.elemSize();
+	    if (!img.isContinuous()) {
+	      img = img.clone();
+	    }
+	    if((bytes = send(remoteSocket,img.data,imgSize, 0)) < 0){
+	      printf("error");
+	      videoError=1;
+	    }
+	  }else{	    
+	    int imgSize = thresholded.total() * thresholded.elemSize();
+	    if (!thresholded.isContinuous()) {
+	      thresholded = thresholded.clone();
+	    }
+	    if((bytes = send(remoteSocket,thresholded.data,imgSize,0)) <0){
+	      printf("error");
+	      videoError=1;
+	    }
+	  }
+	} // server
+	
+      } ///-- counter 10
       waitKey(5);
 
       newFrame = false;
