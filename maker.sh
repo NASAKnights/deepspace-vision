@@ -1,6 +1,6 @@
 #!/bin/bash
 
-RPI=true;
+RPI=false;
 
 
 #link_frcLib=/home/denis/FRC/opencv/build/lib/

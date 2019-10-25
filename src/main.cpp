@@ -59,7 +59,7 @@ bool USESERVER = false;
 bool USECOLOR = false;
 bool DOPRINT = false;
 
-int counter = 0;
+int counter = 0, counter2=0, counter_old=0;
 struct timeval t1, t2;
 
 bool SideShow = false;
@@ -416,18 +416,21 @@ int main(int argc, const char* argv[])
 {
   int missFR = 0;
   //sigaction(SIGPIPE, &(struct sigaction){SIG_IGN}, NULL);
-  string args = argv[1];
-  vector<string> token;
-  for(int i=1;i<4;i++)
-    token.push_back(args.substr(i,1));
-  for(int i=0;i<token.size();i++){
-    if(token[i]=="c")
-      USECOLOR = true;
-    if(token[i]=="t")
-      SHOWTR = true;
-    if(token[i]=="s")
-      USESERVER = true;
-  }//add port arg
+  if(argc>1){
+    string args = argv[1];
+    vector<string> token;
+    printf("args size: %d\n",args.size());
+    for(int i=1;i<args.size();i++)
+      token.push_back(args.substr(i,1));
+    for(int i=0;i<token.size();i++){
+      if(token[i]=="c")
+	USECOLOR = true;
+      if(token[i]=="t")
+	SHOWTR = true;
+      if(token[i]=="s")
+	USESERVER = true;
+    }//add port arg
+  }
   printf("State:\nUSECOLOR=%d\nSHOWTR=%d\nUSESERVER=%d\n",USECOLOR,SHOWTR,USESERVER);
 
   gettimeofday(&t1, NULL);
@@ -462,145 +465,145 @@ int main(int argc, const char* argv[])
   while (true)
     {
       pthread_mutex_lock(&frameMutex);
-      if(!frame.empty() && newFrame) //check if new frame is available
-	{
-	  frame.copyTo(img);
-	  pthread_mutex_unlock(&frameMutex);
-	  thresholded = ThresholdImage(img);
-	  morphOps(thresholded);
-	  pthread_mutex_lock(&targetMutex);
-	  int nt = findTarget(img, thresholded, targets);
-	  if (qdebug > 0)cout << " found targets = " << nt << endl;
-	  if (nt==2) { //found 2 targets, now to calculations to find distance from them.
+      if(!frame.empty() && newFrame){ //check if new frame is available
+	//{
+	frame.copyTo(img);
+	pthread_mutex_unlock(&frameMutex);
+	thresholded = ThresholdImage(img);
+	morphOps(thresholded);
+	pthread_mutex_lock(&targetMutex);
+	int nt = findTarget(img, thresholded, targets);
+	if (qdebug > 0)cout << " found targets = " << nt << endl;
+	if (nt==2) { //found 2 targets, now to calculations to find distance from them.
 	    
-	    //tLeft->Show();
-	    //tRight->Show();
-	    //====================================================================
-	    //   calculations 
-	    //====================================================================
+	  //tLeft->Show();
+	  //tRight->Show();
+	  //====================================================================
+	  //   calculations 
+	  //====================================================================
 
-	    if (qdebug > 1 ) cout << "\n---------------------------" << endl;
-	    double KL = 60.; // 
-	    double H0 = 62*KL; // size in pix to cm
-	    double W0 =  33*KL; // size in pix to cm
-	    float d1 = H0/tLeft->height;
-	    float d2 = H0/tRight->height;
-	    //------ area version -----
-	    double KS=60;   // inches
-	    double S0=1480; // area at this distance 
-	    double s1=tLeft->area;
-	    double s2=tRight->area;
-	    double cs1 = s1/(S0*KS*KS/(d1*d1)); if (cs1>1.) cs1=0.9999;
-	    double cs2 = s2/(S0*KS*KS/(d2*d2)); if (cs2>1.) cs2=0.9999;
-	    double z0=(d1*cs1+d2*cs2)/2.;
-	    double sn1=sqrt(1-cs1*cs1);
-	    double sn2=sqrt(1-cs2*cs2);
-	    double x0=(d1*sn1+d2*sn2)/2.;
-	    double d00=sqrt(x0*x0+z0*z0);
-	    alpha = atan2(x0,z0);// 180./3.1415;
-	    double offsetX=(FrameWidth/2-centerob.x);
-	    double KX=4./3.;
-	    double shiftX=offsetX*KX/d00;
-	    if (d1<d2) x0=-x0;
+	  if (qdebug > 1 ) cout << "\n---------------------------" << endl;
+	  double KL = 60.; // 
+	  double H0 = 62*KL; // size in pix to cm
+	  double W0 =  33*KL; // size in pix to cm
+	  float d1 = H0/tLeft->height;
+	  float d2 = H0/tRight->height;
+	  //------ area version -----
+	  double KS=60;   // inches
+	  double S0=1480; // area at this distance 
+	  double s1=tLeft->area;
+	  double s2=tRight->area;
+	  double cs1 = s1/(S0*KS*KS/(d1*d1)); if (cs1>1.) cs1=0.9999;
+	  double cs2 = s2/(S0*KS*KS/(d2*d2)); if (cs2>1.) cs2=0.9999;
+	  double z0=(d1*cs1+d2*cs2)/2.;
+	  double sn1=sqrt(1-cs1*cs1);
+	  double sn2=sqrt(1-cs2*cs2);
+	  double x0=(d1*sn1+d2*sn2)/2.;
+	  double d00=sqrt(x0*x0+z0*z0);
+	  alpha = atan2(x0,z0);// 180./3.1415;
+	  double offsetX=(FrameWidth/2-centerob.x);
+	  double KX=4./3.;
+	  double shiftX=offsetX*KX/d00;
+	  if (d1<d2) x0=-x0;
 	    
-	    if (qdebug == -1){
-	      printf("==>  s= %.2f %.2f cs= %.2f %.2f  d^2=%.2f s0= %.2f %.2f\n"
-		     ,s1,s2,cs1,cs2,d1*d1,S0*KS*KS/(d1*d1),S0*KS*KS/(d1*d1));
-	      cout << "==>  x0= " << x0 << " z0= " << z0 << " d00= " << d00 << " al2= " << alpha << endl;
-	      printf("\n offset = %.2f  shift = %.2f \n",offsetX,shiftX);
-	    }
-	    
-	    dist = d00;
-	    if (d1<d2) 
-	      alpha=-alpha;
-
-	    //enter values into struct
-	    position.z=dist*cos(alpha);
-	    position.x=dist*sin(alpha);
-	    position.y=tLeft->center.y;
-	    position.angle=alpha*180./3.1415;
-	    position.dist=dist;
-	    position.OffSetx=shiftX; //in inch
-	    position.OffSety=   (FrameHeight/2-centerob.y)/dist*2;
-
-	    //put latest values into avaraging struct, delete old one.
-	    posA.push_back(position);
-	    if(posA.size()>ASIZE)
-	      posA.erase(posA.begin());
-
-	    //resetting avarage struct
-	    positionAV.x=0;
-	    positionAV.y=0;
-	    positionAV.z=0;
-	    positionAV.angle=0;
-	    positionAV.dist=0;
-	    positionAV.OffSetx=0;
-	    positionAV.OffSety=0;
-	    
-	    
-	    for(it = posA.begin(); it != posA.end(); it++){
-	      //cout<< i << ": x = " << (*it).x << endl;
-	      positionAV.x+=(*it).x;
-	      positionAV.y+=(*it).y;
-	      positionAV.z+=(*it).z;
-	      positionAV.angle+=(*it).angle;
-	      positionAV.dist+=(*it).dist;
-	      positionAV.OffSetx+=(*it).OffSetx;
-	      positionAV.OffSety+=(*it).OffSetx;
-	      
-	    }
-	    positionAV.x/=posA.size();
-	    positionAV.y/=posA.size();
-	    positionAV.z/=posA.size();
-	    positionAV.angle/=posA.size();
-	    positionAV.dist/=posA.size();
-	    positionAV.OffSetx/=posA.size();
-	    positionAV.OffSety/=posA.size();
-	    
-
-	    if (qdebug == -1){
-	      cout << "\nx= " << position.x 
-		   << " y= " << position.y 
-		   << " z= " << position.z 
-		   << " angle= " << position.angle 
-		   << " Offset= " << position.OffSetx
-		   << endl;
-	    }
-	    calcTarget();
-	    double qtest;
-	    double wtest;
-	    if(qdebug == -1){
-	      cout << "" << endl;
-	      cout << "/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*" << endl;
-	    }
-	  }else{
-	    //if (qdebug == -1) 
-	    if(qdebug>0) cout << "failed nt = " << nt << endl;
-	    positionAV.x=-1;
-	    positionAV.y=0;
-	    positionAV.z=-1;
-	    positionAV.angle=0;
-	    positionAV.dist=0;
-	    positionAV.OffSetx=0;
-	    positionAV.OffSety=0;
-	    if (qdebug == -1){
-	      cout << "\nx= " << position.x 
-		   << " y= " << position.y 
-		   << " z= " << position.z 
-		   << " angle= " << position.angle 
-		   << " Offset= " << position.OffSetx
-		   << endl;
-	    }
-	    missFR++;
-
-
-	    
+	  if (qdebug == -1){
+	    printf("==>  s= %.2f %.2f cs= %.2f %.2f  d^2=%.2f s0= %.2f %.2f\n"
+		   ,s1,s2,cs1,cs2,d1*d1,S0*KS*KS/(d1*d1),S0*KS*KS/(d1*d1));
+	    cout << "==>  x0= " << x0 << " z0= " << z0 << " d00= " << d00 << " al2= " << alpha << endl;
+	    printf("\n offset = %.2f  shift = %.2f \n",offsetX,shiftX);
 	  }
-	  if(SHOWO)
-	    imshow("Original", img);
-	  if(SHOWT)
-	    imshow("Thresholded", thresholded);
-	  if (qdebug > 2){
+	    
+	  dist = d00;
+	  if (d1<d2) 
+	    alpha=-alpha;
+
+	  //enter values into struct
+	  position.z=dist*cos(alpha);
+	  position.x=dist*sin(alpha);
+	  position.y=tLeft->center.y;
+	  position.angle=alpha*180./3.1415;
+	  position.dist=dist;
+	  position.OffSetx=shiftX; //in inch
+	  position.OffSety=   (FrameHeight/2-centerob.y)/dist*2;
+
+	  //put latest values into avaraging struct, delete old one.
+	  posA.push_back(position);
+	  if(posA.size()>ASIZE)
+	    posA.erase(posA.begin());
+
+	  //resetting avarage struct
+	  positionAV.x=0;
+	  positionAV.y=0;
+	  positionAV.z=0;
+	  positionAV.angle=0;
+	  positionAV.dist=0;
+	  positionAV.OffSetx=0;
+	  positionAV.OffSety=0;
+	    
+	    
+	  for(it = posA.begin(); it != posA.end(); it++){
+	    //cout<< i << ": x = " << (*it).x << endl;
+	    positionAV.x+=(*it).x;
+	    positionAV.y+=(*it).y;
+	    positionAV.z+=(*it).z;
+	    positionAV.angle+=(*it).angle;
+	    positionAV.dist+=(*it).dist;
+	    positionAV.OffSetx+=(*it).OffSetx;
+	    positionAV.OffSety+=(*it).OffSetx;
+	      
+	  }
+	  positionAV.x/=posA.size();
+	  positionAV.y/=posA.size();
+	  positionAV.z/=posA.size();
+	  positionAV.angle/=posA.size();
+	  positionAV.dist/=posA.size();
+	  positionAV.OffSetx/=posA.size();
+	  positionAV.OffSety/=posA.size();
+	    
+
+	  if (qdebug == -1){
+	    cout << "\nx= " << position.x 
+		 << " y= " << position.y 
+		 << " z= " << position.z 
+		 << " angle= " << position.angle 
+		 << " Offset= " << position.OffSetx
+		 << endl;
+	  }
+	  calcTarget();
+	  double qtest;
+	  double wtest;
+	  if(qdebug == -1){
+	    cout << "" << endl;
+	    cout << "/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*" << endl;
+	  }
+	}else{
+	  //if (qdebug == -1) 
+	  if(qdebug>0) cout << "failed nt = " << nt << endl;
+	  positionAV.x=-1;
+	  positionAV.y=0;
+	  positionAV.z=-1;
+	  positionAV.angle=0;
+	  positionAV.dist=0;
+	  positionAV.OffSetx=0;
+	  positionAV.OffSety=0;
+	  if (qdebug == -1){
+	    cout << "\nx= " << position.x 
+		 << " y= " << position.y 
+		 << " z= " << position.z 
+		 << " angle= " << position.angle 
+		 << " Offset= " << position.OffSetx
+		 << endl;
+	  }
+	  missFR++;
+
+
+	    
+	}
+	if(SHOWO)
+	  imshow("Original", img);
+	if(SHOWT)
+	  imshow("Thresholded", thresholded);
+	if (qdebug > 2){
 	  printf("------------------------------------------------------------\n");
 	  if(DOPRINT){
 	    printf("X:%.2f, Y:%.2f, Z:%.2f, ang:%.2f, dist:%.2f, OffX:%.2f, OffY:%.2f\n",position.x, position.y, position.z, position.angle, position.dist, position.OffSetx, position.OffSety);
@@ -609,19 +612,19 @@ int main(int argc, const char* argv[])
 	  
 	  if(position.x>10 || position.x<-10)
 	    printf("dist: %f alpha: %f\n",dist,alpha);
-	  }
-	  pthread_mutex_unlock(&targetMutex);
-	  totalfound.clear();
-	  counter++;//find out where its supposed to be
 	}
-      
+	pthread_mutex_unlock(&targetMutex);
+	totalfound.clear();
+	counter++;//find out where its supposed to be
+      }//end of check for new frame
       pthread_mutex_unlock(&frameMutex);
-      //counter++;
-      if(counter%10==0){
+      counter2++;
+      if(counter%10==0 && counter != counter_old){
+	counter_old = counter;
 	gettimeofday(&t2,NULL);
 	double dt = t2.tv_usec-t1.tv_usec+1000000 * (t2.tv_sec - t1.tv_sec);
 	t1=t2;
-	printf("------ Frame rate: %f fr/s \n",10./dt*1e6);
+	printf("------ Frame rate: %f fr/s (%f) \n",10./dt*1e6,counter2/dt*1e6); counter2=0;
 	printf("------ Miss Frame: %d fr/s \n",missFR);
 	missFR=0;
 	if(USESERVER && remoteSocket>0){
