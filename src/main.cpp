@@ -14,7 +14,6 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/types_c.h>
 #include "main.h"
-#include <include/constants_c.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <sys/ioctl.h>
@@ -361,15 +360,15 @@ void *VideoCap(void *args)
       usleep(10000000);
     }
   }
-  
-  vcap.set(CV_CAP_PROP_BRIGHTNESS, 100);
   //vcap.set(CV_CAP_PROP_CONTRAST, 100);
-  vcap.set(CV_CAP_PROP_AUTO_EXPOSURE, 255);
   //vcap.set(CV_CAP_PROP_EXPOSURE, 255);
   //vcap.set(CV_CAP_PROP_SATURATION, 100);
   //vcap.set(CV_CAP_PROP_GAIN,0);
-  FrameWidth = vcap.get(CV_CAP_PROP_FRAME_WIDTH);
-  FrameHeight = vcap.get(CV_CAP_PROP_FRAME_HEIGHT);
+
+  vcap.set(cv::CAP_PROP_BRIGHTNESS,100);
+  vcap.set(cv::CAP_PROP_AUTO_EXPOSURE, 255);
+  FrameWidth = vcap.get(cv::CAP_PROP_FRAME_WIDTH);
+  FrameHeight = vcap.get(cv::CAP_PROP_FRAME_WIDTH);
   
   
   cout << "success!" << endl;
