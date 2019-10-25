@@ -14,23 +14,31 @@ run_compLib=$link_compLib
 
 FILE=main
 
-COMM=${1-linkrun}
+COMM=${1-auto}
 PAR1=${2}
 PAR2=${3}
 PAR3=${4}
-if [[ ${COMM} == -h || ${COMM} == --help ]]
+PARA=""
+if [[ ${COMM} == -h || ${COMM} == --help || ${COMM} == -help ]]
 then
     echo ""
-    echo -e "Usage  : $0 <run|link> \n-c color\n-t trackbars\n-s server"
+    echo -e "Usage  : $0 \n-l compiles (must be alone) \n-c color\n-t trackbars\n-s server"
     echo ""
     exit 1
 fi
 
 
+if [[ ${COMM} != -l && ${COMM} != auto ]]
+then
+    PARA=${COMM}
+    COMM=auto
+fi
+    
+
 export LD_LIBRARY_PATH=
 
 
-if [[ ${COMM} == run ]]; then
+if [[ ${COMM} == auto ]]; then
 
 
     
@@ -44,14 +52,13 @@ if [[ ${COMM} == run ]]; then
     then
 	export LD_LIBRARY_PATH=$run_compLib
     fi
-
     
-    ./${FILE}.exe ${PAR1} ${PAR2} ${PAR3}
+    ./${FILE}.exe ${PARA} ${PAR1} ${PAR2} ${PAR3}
     
 
 
     #-------------------------------------------------
-elif [[ ${COMM} == link ]]
+elif [[ ${COMM} == -l ]]
 then
     if [[ -f "${FILE}.exe" ]]
     then
