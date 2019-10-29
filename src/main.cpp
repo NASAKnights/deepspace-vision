@@ -36,16 +36,17 @@ double MinRatio = 0.1;
 double MaxRatio = 0.65;
 int MaxDiff = 1000;
 
-int minH = 133;
+int minH = 0;
 int maxH = 255;
-int minS = 255;
+int minS = 0;
 int maxS = 255;
-int minV = 169;
+int minV = 181;
 int maxV = 255;
 
 //booleans
 bool USEIPCAM = false;
 bool SHOWO = false;
+bool SHOWH = false;
 bool SHOWT = false; 
 bool SHOWTR = false;
 bool USESERVER = false;
@@ -184,10 +185,9 @@ int findTarget(Mat original, Mat thresholded, Targets *targets)
   findContours(thresholded, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
 
   //------------- preselect by perimetr ------------------
-  unsigned int contourMin = 10;
   //std::cout << "initial targets = " << contours.size() << std::endl;
   for (std::vector<std::vector<Point> >::iterator it = contours.begin(); it != contours.end();){
-    if (it->size() < contourMin){
+    if (it->size() < 10){//min contour
       it = contours.erase(it);
       if (qdebug==2) std::cout << "erased" << std::endl;
     } else
@@ -339,7 +339,7 @@ void *VideoCap(void *args)
     }
     std::cout << "webcam:onnected to " << webcam << std::endl;
   }else{
-    while (!vcap.open(0)){
+    while (!vcap.open(1)){
       std::cout << "cant connect" << std::endl;
       usleep(10000000);
     }
@@ -387,7 +387,7 @@ void calcTarget()
   int testq; 
 }
 //-----------------------------------------------------------------------------
-void nullifyStruct(Position pos){
+inline void nullifyStruct(Position &pos){
   pos.x=0;
   pos.y=0;
   pos.z=0;
@@ -414,6 +414,12 @@ int main(int argc, const char* argv[])
 	SHOWTR = true;
       if(token[i]=="s")
 	USESERVER = true;
+      if(token[i]=="o")
+	SHOWO = true;
+      if(token[i]=="h")
+	SHOWH = true;
+      if(token[i]=="b")
+	SHOWT = true;
     }//#FIX
   }
   printf("State:\nUSECOLOR=%d\nSHOWTR=%d\nUSESERVER=%d\n",USECOLOR,SHOWTR,USESERVER);
@@ -440,7 +446,7 @@ int main(int argc, const char* argv[])
       frame.copyTo(img);
       pthread_mutex_unlock(&frameMutex);
       cv::cvtColor(img, HSV, CV_BGR2HSV);
-      thresholded = ThresholdImage(img);
+      thresholded = ThresholdImage(HSV);
       morphOps(thresholded);
       pthread_mutex_lock(&targetMutex);
       int nt = findTarget(img, thresholded, targets);
@@ -503,13 +509,7 @@ int main(int argc, const char* argv[])
 	  posA.erase(posA.begin());
 
 	//resetting avarage struct
-	positionAV.x=0;
-	positionAV.y=0;
-	positionAV.z=0;
-	positionAV.angle=0;
-	positionAV.dist=0;
-	positionAV.OffSetx=0;
-	positionAV.OffSety=0;
+	nullifyStruct(positionAV);
 	    
 	    
 	for(it = posA.begin(); it != posA.end(); it++){
@@ -550,13 +550,9 @@ int main(int argc, const char* argv[])
       }else{
 	//if (qdebug == -1) 
 	if(qdebug>0) std::cout << "failed nt = " << nt << std::endl;
+	nullifyStruct(positionAV);
 	positionAV.x=-1;
-	positionAV.y=0;
 	positionAV.z=-1;
-	positionAV.angle=0;
-	positionAV.dist=0;
-	positionAV.OffSetx=0;
-	positionAV.OffSety=0;
 	if (qdebug == -1){
 	  std::cout << "\nx= " << position.x 
 		    << " y= " << position.y 
@@ -574,6 +570,8 @@ int main(int argc, const char* argv[])
 	imshow("Original", img);
       if(SHOWT)
 	imshow("Thresholded", thresholded);
+      if(SHOWH)
+	imshow("HSV" , HSV);
       if (qdebug > 2){
 	printf("------------------------------------------------------------\n");
 	if(DOPRINT){

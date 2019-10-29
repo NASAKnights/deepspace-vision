@@ -22,7 +22,7 @@ PARA=""
 if [[ ${COMM} == -h || ${COMM} == --help || ${COMM} == -help ]]
 then
     echo ""
-    echo -e "Usage  : $0 \n-l compiles (must be alone) \n-c color\n-t trackbars\n-s server"
+    echo -e "Usage  : $0 \n-l compiles (must be alone) \n-c color\n-t trackbars\n-s server\n-o origial\n-h HSV\n-b thresholded"
     echo ""
     exit 1
 fi
