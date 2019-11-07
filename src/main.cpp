@@ -40,8 +40,8 @@ int minH = 0;
 int maxH = 255;
 int minS = 0;
 int maxS = 255;
-int minV = 225;//181
-int maxV = 227;//255
+int minV = 218;//181
+int maxV = 241;//255
 
 //booleans
 bool USEIPCAM = false;
@@ -61,7 +61,7 @@ bool RatioShow = false;
 //frame counter
 int counter = 0, counter2=0, counter_old=0;
 struct timeval t1, t2;
-int qdebug = 0;
+int qdebug = 1;
 
 //vals
 double alpha;
@@ -189,7 +189,7 @@ int findTarget(Mat original, Mat thresholded, Targets *targets)
   for (std::vector<std::vector<Point> >::iterator it = contours.begin(); it != contours.end();){
     if (it->size() < 10){//min contour
       it = contours.erase(it);
-      if (qdebug==2) std::cout << "erased" << std::endl;
+      if (qdebug>4) std::cout << "erased" << std::endl;
     } else
       ++it;
   }
@@ -198,10 +198,10 @@ int findTarget(Mat original, Mat thresholded, Targets *targets)
 
   int ntargets=0;
   if (contours.size() > MAXTARGETS ) {
-    if (qdebug==2) std::cout <<  " too many targets found = " << contours.size() << std::endl;
+    if (qdebug>2) std::cout <<  " too many targets found = " << contours.size() << std::endl;
     return -1;
   } else if (2 > contours.size() ){
-    if (qdebug==2) std::cout << "too little targets found" << std::endl;
+    if (qdebug>2) std::cout << "too little targets found" << std::endl;
     return -1;
   }
   //--------------------------------------------------------
@@ -215,7 +215,7 @@ int findTarget(Mat original, Mat thresholded, Targets *targets)
       targets[i].NullTargets();
 
       //std::cout << " hierarchi = " << hierarchy[i][2] << std::endl;
-      if (hierarchy[i][2]!=-1) {if (qdebug==2) printf("failed hierarchy\n"); continue;}
+      if (hierarchy[i][2]!=-1) {if (qdebug>2) printf("failed hierarchy\n"); continue;}
 
       minRect[i] = minAreaRect(Mat(contours[i]));
       Point2f rect_points[4];
@@ -259,19 +259,19 @@ int findTarget(Mat original, Mat thresholded, Targets *targets)
  
       //if (area<200) {if (qdebug == 0)printf("failed area\n");continue;}
 
-      if ( MinRatio >  RRatio || RRatio > MaxRatio ){if (qdebug==1) printf("failed ratio : %f \n",RRatio); continue;}
+      if ( MinRatio >  RRatio || RRatio > MaxRatio ){if (qdebug>2) printf("failed ratio : %f \n",RRatio); continue;}
  
       //if (abs(angle)<10) continue; 
 
       double ang1=15, ang2=75;
-      if ( abs(abs(angle)-ang1)>20 && abs(abs(angle)-ang2)>20 ){if (qdebug==1) printf("failed angle\n"); continue;}
+      if ( abs(abs(angle)-ang1)>20 && abs(abs(angle)-ang2)>20 ){if (qdebug>2) printf("failed angle\n"); continue;}
 
       targets[i].number = i;
       targets[i].status=1; // --- preselected target ----	
       int ttt = 0;
       for ( int k = 0; k < i; k++) {
 
-	if (targets[i].status==0) {if (qdebug==1) printf("failed status\n");continue;}
+	if (targets[i].status==0) {if (qdebug>2) printf("failed status\n");continue;}
 	
 	double xi = targets[i].center.x;
 	double xk = targets[k].center.x;
@@ -284,11 +284,11 @@ int findTarget(Mat original, Mat thresholded, Targets *targets)
 	//std::cout << " i,k = " << i << " " << k <<  " dx = " << dx << " dy = " << dy << std::endl;
 	//std::cout << " area  = " << targets[i].area << " " << targets[k].area << std::endl;
 	ttt++;
-	if ( abs(dy)>40 ) {if (qdebug==1) printf("failed distance: %f: %d\n",dy,ttt);continue;}
+	if ( abs(dy)>40 ) {if (qdebug>2) printf("failed distance: %f: %d\n",dy,ttt);continue;}
 	double arr = targets[i].area/targets[k].area;
 	if (arr>1) arr=1./arr;
-	if (qdebug > 1)std::cout << " area " << targets[i].area << " " << targets[k].area << " arr= " << arr << std::endl;
-	if (arr<0.5) {if (qdebug==1) printf("failed area ratio: %f: %d\n",arr,ttt);continue;}
+	if (qdebug > 3)std::cout << " area " << targets[i].area << " " << targets[k].area << " arr= " << arr << std::endl;
+	if (arr<0.5) {if (qdebug>2) printf("failed area ratio: %f: %d\n",arr,ttt);continue;}
 	//------  end selection -------
 
 	if (targets[i].status==1) { targets[i].status=2; targets[i].found = "yes"; ntargets++ ; }
@@ -420,9 +420,12 @@ int main(int argc, const char* argv[])
 	SHOWH = true;
       if(token[i]=="b")
 	SHOWT = true;
+      if(token[i]=="p")
+	DOPRINT = true;
     }//#FIX
   }
   printf("State:\nUSECOLOR=%d\nSHOWTR=%d\nUSESERVER=%d\n",USECOLOR,SHOWTR,USESERVER);
+  printf("DOPRINT=%d\n",DOPRINT);
   Mat img, HSV, thresholded, output;
 
   int missFR = 0;
@@ -450,7 +453,7 @@ int main(int argc, const char* argv[])
       morphOps(thresholded);
       pthread_mutex_lock(&targetMutex);
       int nt = findTarget(img, thresholded, targets);
-      if (qdebug > 0)std::cout << " found targets = " << nt << std::endl;
+      if (qdebug > 2)std::cout << " found targets = " << nt << std::endl;
       if (nt==2) { //found 2 targets, now to calculations to find distance from them.
 	    
 	//tLeft->Show();
@@ -483,7 +486,7 @@ int main(int argc, const char* argv[])
 	double shiftX=offsetX*KX/d00;
 	if (d1<d2) x0=-x0;
 	    
-	if (qdebug == -1){
+	if (qdebug > 4){
 	  printf("==>  s= %.2f %.2f cs= %.2f %.2f  d^2=%.2f s0= %.2f %.2f\n"
 		 ,s1,s2,cs1,cs2,d1*d1,S0*KS*KS/(d1*d1),S0*KS*KS/(d1*d1));
 	  std::cout << "==>  x0= " << x0 << " z0= " << z0 << " d00= " << d00 << " al2= " << alpha << std::endl;
@@ -532,7 +535,7 @@ int main(int argc, const char* argv[])
 	positionAV.OffSety/=posA.size();
 	    
 
-	if (qdebug == -1){
+	if (qdebug > 0){
 	  std::cout << "\nx= " << position.x 
 		    << " y= " << position.y 
 		    << " z= " << position.z 
@@ -543,17 +546,17 @@ int main(int argc, const char* argv[])
 	calcTarget();
 	double qtest;
 	double wtest;
-	if(qdebug == -1){
+	if(qdebug > 4){
 	  std::cout << "" << std::endl;
 	  std::cout << "/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*" << std::endl;
 	}
       }else{
 	//if (qdebug == -1) 
-	if(qdebug>0) std::cout << "failed nt = " << nt << std::endl;
+	if(qdebug>1) std::cout << "failed nt = " << nt << std::endl;
 	nullifyStruct(positionAV);
 	positionAV.x=-1;
 	positionAV.z=-1;
-	if (qdebug == -1){
+	if (qdebug > 0){
 	  std::cout << "\nx= " << position.x 
 		    << " y= " << position.y 
 		    << " z= " << position.z 
@@ -572,11 +575,11 @@ int main(int argc, const char* argv[])
 	imshow("Thresholded", thresholded);
       if(SHOWH)
 	imshow("HSV" , HSV);
-      if (qdebug > 2){
+      if (qdebug > 0){
 	printf("------------------------------------------------------------\n");
 	if(DOPRINT){
-	  printf("X:%.2f, Y:%.2f, Z:%.2f, ang:%.2f, dist:%.2f, OffX:%.2f, OffY:%.2f\n",position.x, position.y, position.z, position.angle, position.dist, position.OffSetx, position.OffSety);
-	  printf("X:%.2f, Y:%.2f, Z:%.2f, ang:%.2f, dist:%.2f, OffX:%.2f, OffY:%.2f\n",positionAV.x, positionAV.y, positionAV.z, positionAV.angle, positionAV.dist, positionAV.OffSetx, positionAV.OffSety);
+	  printf("Current: X:%.2f, Y:%.2f, Z:%.2f, ang:%.2f, dist:%.2f, OffX:%.2f, OffY:%.2f\n",position.x, position.y, position.z, position.angle, position.dist, position.OffSetx, position.OffSety);
+	  printf("Avarage: X:%.2f, Y:%.2f, Z:%.2f, ang:%.2f, dist:%.2f, OffX:%.2f, OffY:%.2f\n",positionAV.x, positionAV.y, positionAV.z, positionAV.angle, positionAV.dist, positionAV.OffSetx, positionAV.OffSety);
 	}
 	  
 	if(position.x>10 || position.x<-10)
@@ -593,8 +596,10 @@ int main(int argc, const char* argv[])
       gettimeofday(&t2,NULL);
       double dt = t2.tv_usec-t1.tv_usec+1000000 * (t2.tv_sec - t1.tv_sec);
       t1=t2;
-      printf("------ Frame rate: %f fr/s (%f) \n",10./dt*1e6,counter2/dt*1e6); counter2=0;//#FIX
-      printf("------ Miss Frame: %d fr/s \n",missFR);
+      if(qdebug > 3){
+	printf("------ Frame rate: %f fr/s (%f) \n",10./dt*1e6,counter2/dt*1e6); counter2=0;//#FIX
+	printf("------ Miss Frame: %d fr/s \n",missFR);
+      }
       missFR=0;
       if(USESERVER && remoteSocket>0){
 	int bytes = 0;
