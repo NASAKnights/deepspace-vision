@@ -8,11 +8,10 @@
 #include <sys/socket.h> 
 #include <sys/types.h> 
 #include <unistd.h>
-#include "tcplib.h"
 #include <iostream>
 #include "main.h"
+#include "tcp_thread.h"
 #define MAX 80 
-#define PORT 6969
 #define MLEN 8192
 #define SA struct sockaddr
 int sig_int, sig_hup, sig_alarm, sig_pipe;   
@@ -21,6 +20,27 @@ using namespace std;
  
 double data[20];
 int debug=0;
+int rem_port,sock_main;
+#define LINFO 128
+#define MAXCLNT 32  //--  used 32 bit word   !!!!
+static int TCP_FLAG=0;
+pthread_t cl_thread[MAXCLNT];
+
+static void *run_cl_thread (void* arg);
+
+
+struct CLIENT {
+  int Kclnt;       //-- client number
+  int sd_current;  //-- tcp port number
+  int rem_port;
+  Position* pos;
+};
+const int LHOST=128;
+struct HOST {
+    int PORT;
+    char NAME[LHOST];
+    int ModID;
+};
 
 int func(int sockfd, Position *pos) 
 {
@@ -81,7 +101,7 @@ int func(int sockfd, Position *pos)
       printf("numbers: %s\n",mesg);
     // and send that buffer to client 
     //write(sockfd, data, sizeof(data)); 
-    int rc = tcp_send2((int*)mesg,strlen(mesg));
+    int rc = tcp_send_th(sockfd,(int*)mesg,strlen(mesg));
     if (rc != 0)
       return 1;
     // if msg contains "Exit" then server exit and chat ended. 
@@ -92,7 +112,8 @@ int func(int sockfd, Position *pos)
   } // for loop
 } 
 
-// Driver function 
+// Driver function
+/*
 void *opentcp(void *arg){
   Position *pos=(Position*)arg;
   printf("x=%f,y=%f,An=%f,Dis=%f\n",pos->x,pos->y,pos->angle,pos->dist);
@@ -109,4 +130,84 @@ void *opentcp(void *arg){
     //close(sockfd); 
     tcp_close(PORT);
   }
-} 
+}
+*/
+
+void *opentcp(void *arg){
+  Position *pos = (Position*) arg;
+  
+  unsigned int Client_mask=0,Nclnt=0,Kclnt=0;
+  struct HOST host;
+  int sd_clnt=0;
+  /*-----------  default value for hosts/ports ---------------------------*/
+  strncpy(host.NAME,"127.0.0.1",LHOST); host.PORT=6969;
+
+  //============================================================
+  //           wait for incoming  connections loop  
+  //============================================================
+  while (TCP_FLAG==0) {
+    sock_main=tcp_open_th(host.PORT,NULL);  TCP_FLAG=1;
+    if(sock_main<0){ 
+      //tcp_close(0); TCP_FLAG=0;
+      sleep(1); 
+    }
+  }
+
+  printf("==> Wait for clients loop. \n");
+
+  while(!sig_int) {
+    printf(" while_loop:: PORT=%d ",host.PORT);
+    char host_name[LINFO];
+    rem_port=tcp_listen3(sock_main,host_name,LINFO,&sd_clnt);
+    printf(" return from listen3 , ADD NEW Client host=%s remport =%d \n", host_name,rem_port);
+
+    if (Nclnt>=MAXCLNT) { printf(" Error :: MAX CLIENTS=%d\n",MAXCLNT); continue; }
+    //---   add new client here -----------
+    Kclnt=Nclnt++;
+    printf(" ADD NEW Client DONE N_clnt=%d Kclnt=%d Mask=%#x !!! \n",Nclnt,Kclnt,Client_mask);
+    //---  end add new client -------
+    //pid=fork2();
+    //--------------------------------------------------------------
+    struct CLIENT sclnt;
+    sclnt.Kclnt=Kclnt;
+    sclnt.sd_current=sd_clnt;
+    sclnt.rem_port=rem_port;
+    sclnt.pos=pos;
+    int ret = pthread_create (&cl_thread[Kclnt], 0, run_cl_thread, &sclnt);
+    if (ret) {
+      perror ("pthread_create");
+    }
+    char th_name[64];
+    sprintf(th_name,"cl_thread_%d",Kclnt);
+    ret=pthread_setname_np(cl_thread[Kclnt],th_name);
+    printf("\n detach run_child thread Kclnt=%d\n",Kclnt);   ret = pthread_detach(cl_thread[Kclnt]);
+    if (ret!= 0) fprintf(stderr, "detach %d failed %d\n", Kclnt,ret);
+
+    //----------------------------------------------------
+    printf(" Create child \n");
+    //tcp_close(-1);
+  }  //--- end While(1) Loop
+ 
+  /*-----------------------------------------------------------*/
+  printf(" Close TCP ports \n");
+  //tcp_close(0);
+}
+
+
+static void *run_cl_thread (void* arg) {
+    struct CLIENT *clnt = (struct CLIENT*) arg;
+    unsigned int Kclnt = clnt->Kclnt;
+    int sd_current= clnt->sd_current;
+    int rem_port=clnt->rem_port;
+
+    printf("start new client thread , Kclnt=%d sd=%d \n",Kclnt,sd_current);
+    //tcp_close_old();  // ???
+    func(sd_current,clnt->pos);
+    printf("thread return from Client No=%d close port=%d\n",Kclnt,sd_current);
+    
+    close(sd_current);
+
+    printf("EXIT child !!!!  clean client here k=%d !!!!\n",Kclnt);
+    
+    return 0;
+}

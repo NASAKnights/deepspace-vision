@@ -1,4 +1,5 @@
-#include "tcplib.h"
+//#include "tcplib.h"
+#include "tcp_thread.h"
 
 #include <stdio.h>
 #include <netdb.h> 
@@ -16,16 +17,16 @@ extern int videoError;
 void *videoServer(void *arg){
   char host[80];
   sprintf(host,"%s","127.0.0.1");
-  int sock = tcp_open(videoPort,host);
+  int sock = tcp_open_th(videoPort,host);
   while(1){
-    int sockfd = tcp_listen();
+    int sockfd = tcp_listen_th(sock);
     remoteSocket = sockfd;
   /*
   while (!sig_int){
     int sockfd = tcp_listen();
     printf("server accept the client...\n"); 
     if(USESERVER){
-      int localSocket;
+      int localSocket; 
       struct sockaddr_in localAddr, remoteAddr;
 
       int addrLen= sizeof(struct sockaddr_in);
@@ -59,7 +60,7 @@ void *videoServer(void *arg){
     }
   */
     while(videoError==0) sleep(1);
-    //tcp_close(remoteSocket);
+    close(remoteSocket);
     remoteSocket=0;
     videoError=0;
   }

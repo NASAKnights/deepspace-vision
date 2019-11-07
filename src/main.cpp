@@ -40,8 +40,8 @@ int minH = 0;
 int maxH = 255;
 int minS = 0;
 int maxS = 255;
-int minV = 181;
-int maxV = 255;
+int minV = 225;//181
+int maxV = 227;//255
 
 //booleans
 bool USEIPCAM = false;
@@ -339,7 +339,7 @@ void *VideoCap(void *args)
     }
     std::cout << "webcam:onnected to " << webcam << std::endl;
   }else{
-    while (!vcap.open(1)){
+    while (!vcap.open(0)){
       std::cout << "cant connect" << std::endl;
       usleep(10000000);
     }
