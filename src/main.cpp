@@ -37,10 +37,10 @@ double MaxRatio = 0.65;
 int MaxDiff = 1000;
 
 int minH = 0;
-int maxH = 255;
+int maxH = 175;
 int minS = 0;
-int maxS = 255;
-int minV = 218;//181
+int maxS = 14;
+int minV = 219;//181
 int maxV = 241;//255
 
 //booleans
@@ -61,7 +61,7 @@ bool RatioShow = false;
 //frame counter
 int counter = 0, counter2=0, counter_old=0;
 struct timeval t1, t2;
-int qdebug = 1;
+int qdebug = 3;
 
 //vals
 double alpha;
@@ -284,7 +284,7 @@ int findTarget(Mat original, Mat thresholded, Targets *targets)
 	//std::cout << " i,k = " << i << " " << k <<  " dx = " << dx << " dy = " << dy << std::endl;
 	//std::cout << " area  = " << targets[i].area << " " << targets[k].area << std::endl;
 	ttt++;
-	if ( abs(dy)>40 ) {if (qdebug>2) printf("failed distance: %f: %d\n",dy,ttt);continue;}
+	if ( abs(dy)>40 ) {if (qdebug>3) printf("failed distance: %f: %d\n",dy,ttt);continue;}
 	double arr = targets[i].area/targets[k].area;
 	if (arr>1) arr=1./arr;
 	if (qdebug > 3)std::cout << " area " << targets[i].area << " " << targets[k].area << " arr= " << arr << std::endl;
@@ -453,7 +453,7 @@ int main(int argc, const char* argv[])
       morphOps(thresholded);
       pthread_mutex_lock(&targetMutex);
       int nt = findTarget(img, thresholded, targets);
-      if (qdebug > 2)std::cout << " found targets = " << nt << std::endl;
+      if (qdebug > 4)std::cout << " found targets = " << nt << std::endl;
       if (nt==2) { //found 2 targets, now to calculations to find distance from them.
 	    
 	//tLeft->Show();
@@ -462,12 +462,11 @@ int main(int argc, const char* argv[])
 	//   calculations 
 	//====================================================================
 
-	if (qdebug > 1 ) std::cout << "\n---------------------------" << std::endl;
-	double KL = 60.; // 
-	double H0 = 62*KL; // size in pix to cm
-	double W0 =  33*KL; // size in pix to cm
-	float d1 = H0/tLeft->height;
-	float d2 = H0/tRight->height;
+	double ScalingDist = 60.; // 
+	double HeightScalar = 62*ScalingDist; // size in pix to cm
+	double WidthScalar =  33*ScalingDist; // size in pix to cm
+	float d1 = HeightScalar/tLeft->height;
+	float d2 = HeightScalar/tRight->height;
 	//------ area version -----
 	double KS=60;   // inches
 	double S0=1480; // area at this distance 
@@ -484,13 +483,16 @@ int main(int argc, const char* argv[])
 	double offsetX=(FrameWidth/2-centerob.x);
 	double KX=4./3.;
 	double shiftX=offsetX*KX/d00;
+	
+	
 	if (d1<d2) x0=-x0;
-	    
-	if (qdebug > 4){
-	  printf("==>  s= %.2f %.2f cs= %.2f %.2f  d^2=%.2f s0= %.2f %.2f\n"
-		 ,s1,s2,cs1,cs2,d1*d1,S0*KS*KS/(d1*d1),S0*KS*KS/(d1*d1));
-	  std::cout << "==>  x0= " << x0 << " z0= " << z0 << " d00= " << d00 << " al2= " << alpha << std::endl;
-	  printf("\n offset = %.2f  shift = %.2f \n",offsetX,shiftX);
+	if(qdebug > 2){
+	  printf("Height: %.2f, %.2f\n"
+		 "Width: %.2f, %.2f\n"
+		 "==>  s= %.2f %.2f cs= %.2f %.2f s0= %.2f %.2f\n"
+		 "==>  x0 = %.2f z0= %.2f d00= %.2f al2= %.2f\n"
+		 "==>  offset = %.2f shift %.2f\n"
+		 ,tLeft->height,tRight->height,tLeft->width,tRight->width,s1,s2,cs1,cs2,S0*KS*KS/(d1*d1),S0*KS*KS/(d1*d1),x0,z0,d00,alpha,offsetX,shiftX);
 	}
 	    
 	dist = d00;
@@ -536,12 +538,7 @@ int main(int argc, const char* argv[])
 	    
 
 	if (qdebug > 0){
-	  std::cout << "\nx= " << position.x 
-		    << " y= " << position.y 
-		    << " z= " << position.z 
-		    << " angle= " << position.angle 
-		    << " Offset= " << position.OffSetx
-		    << std::endl;
+	  printf("x= %f y= %f z= %f angle= %f Offset= %f\n",position.x,position.y,position.z,position.angle,position.OffSetx);
 	}
 	calcTarget();
 	double qtest;
@@ -557,12 +554,7 @@ int main(int argc, const char* argv[])
 	positionAV.x=-1;
 	positionAV.z=-1;
 	if (qdebug > 0){
-	  std::cout << "\nx= " << position.x 
-		    << " y= " << position.y 
-		    << " z= " << position.z 
-		    << " angle= " << position.angle 
-		    << " Offset= " << position.OffSetx
-		    << std::endl;
+	  printf("x= %f y= %f z= %f angle= %f Offset= %f\n",position.x,position.y,position.z,position.angle,position.OffSetx);
 	}
 	missFR++;
 
@@ -580,10 +572,10 @@ int main(int argc, const char* argv[])
 	if(DOPRINT){
 	  printf("Current: X:%.2f, Y:%.2f, Z:%.2f, ang:%.2f, dist:%.2f, OffX:%.2f, OffY:%.2f\n",position.x, position.y, position.z, position.angle, position.dist, position.OffSetx, position.OffSety);
 	  printf("Avarage: X:%.2f, Y:%.2f, Z:%.2f, ang:%.2f, dist:%.2f, OffX:%.2f, OffY:%.2f\n",positionAV.x, positionAV.y, positionAV.z, positionAV.angle, positionAV.dist, positionAV.OffSetx, positionAV.OffSety);
-	}
-	  
 	if(position.x>10 || position.x<-10)
 	  printf("dist: %f alpha: %f\n",dist,alpha);
+	}
+	  
       }
       pthread_mutex_unlock(&targetMutex);
       totalfound.clear();
