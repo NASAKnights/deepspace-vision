@@ -1,6 +1,6 @@
 #!/bin/bash
 
-RPI=true;
+RPI=false;
 
 
 #link_frcLib=/home/denis/FRC/opencv/build/lib/
@@ -78,7 +78,7 @@ then
     elif [[ "$RPI" == false ]]
     then
 	export LD_LIBRARY_PATH=$link_compLib
-	g++ -std=c++11 -I. -I/home/denis/LIBS/include/opencv4 -L /home/denis/LIBS/lib64 -lopencv_core -lopencv_ml -lopencv_calib3d -lopencv_videoio -lopencv_imgcodecs -lopencv_highgui  -lopencv_imgproc -lpthread src/main.cpp  src/server.cpp src/videoserver.cpp  -o ${FILE}.exe -g
+	g++ -std=c++11 -I. -I/home/denis/LIBS/include/opencv4 -L /home/denis/LIBS/lib64 -lopencv_core -lopencv_ml -lopencv_calib3d -lopencv_videoio -lopencv_imgcodecs -lopencv_highgui  -lopencv_imgproc -lpthread src/main.cpp src/tcp_thread.cc src/opencvPnP.cpp src/server.cpp src/videoserver.cpp  -o ${FILE}.exe -g
 
 
 

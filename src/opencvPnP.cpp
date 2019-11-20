@@ -1,24 +1,33 @@
 #include <opencv2/opencv.hpp>
+#include "main.h"
 
-
-int main(int argc, const char* argv[]){
-  cv::Mat im = cv::imread("targetPnP.jpg");
+void findAnglePnP(cv::Mat im, Targets *tLeft, Targets* tRight){
   std::vector<cv::Point2d> img2dpoints;
   std::vector<cv::Point3d> mod3dpoints;
-  cv::Point2d center = cv::Point2d(im.cols/2,im.rows/2);
-  int dx = 5;
-  if(argc>1) dx=atoi(argv[1]);
-  int dy = dx/5.;
 
+
+  cv::Point2d center = cv::Point2d(im.cols/2,im.rows/2);//use the found center
+  int dx = 5;
+  int dy = dx/5.;
+  //find points
+
+  for(int i=0;i<4;i++){
+    img2dpoints.push_back(*tLeft[i].points);
+  }
+  /*
   img2dpoints.push_back(cv::Point2d(center.x-100+dx,center.y-100-dy));
   img2dpoints.push_back(cv::Point2d(center.x-100+dx,center.y+100+dy));
   img2dpoints.push_back(cv::Point2d(center.x+100-dx,center.y+100-dy));
   img2dpoints.push_back(cv::Point2d(center.x+100-dx,center.y-100+dy));
-
+  */
   mod3dpoints.push_back(cv::Point3d(-1.0,-1.0,0.0));
   mod3dpoints.push_back(cv::Point3d(-1.0, 1.0,0.0));
   mod3dpoints.push_back(cv::Point3d( 1.0, 1.0,0.0));
   mod3dpoints.push_back(cv::Point3d( 1.0,-1.0,0.0));
+
+
+
+
 
   double focal_length = im.cols;
   cv::Mat camera_matrix = (cv::Mat_<double>(3,3) << focal_length, 0, center.x, 0 , focal_length, center.y, 0, 0, 1);

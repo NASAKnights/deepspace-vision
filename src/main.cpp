@@ -1,24 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <opencv2/opencv.hpp>
-#include <string>
-#include <ctime>
-#include <iostream>
-#include <iomanip>
-#include <sstream>
-#include <algorithm>
-#include <unistd.h>
-#include <pthread.h>
-#include <opencv2/highgui/highgui_c.h>
-#include <opencv2/core/core_c.h>
-#include <opencv2/highgui/highgui.hpp>
-#include <opencv2/imgproc/types_c.h>
 #include "main.h"
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <sys/ioctl.h>
-#include <net/if.h>
-#include <sys/time.h>
 
 /**
  * #FIX // why does that say counter2?
@@ -52,12 +32,12 @@ bool SHOWTR = false;
 bool USESERVER = false;
 bool USECOLOR = false;
 bool DOPRINT = false;
-
+/*
 bool SideShow = false;
 bool AngleShow = false;
 bool AreaShow = false;
 bool RatioShow = false;
-
+*/
 //frame counter
 int counter = 0, counter2=0, counter_old=0;
 struct timeval t1, t2;
@@ -85,61 +65,14 @@ const Scalar BLUE = Scalar(255, 0, 0), RED = Scalar(0,0,255), YELLOW = Scalar(0,
 //threads
 void *opentcp(void *arg);
 void *videoServer(void *arg);
+//void findAnglePnP(cv::Mat im, Targets * targets);
 int remoteSocket = 0;
 int videoPort;
 int videoError = 0;
 
-//Classes
-class Targets{
-public:
-  Targets(){NullTargets();};
-  int status;
-  std::string found;
-  Point center;
-  double height;
-  double width;
-  double area;
-  char LorR;
-  int number;
-  std::string reason;
-  double angle;
-  double ratio;
-  int offby;
-  void NullTargets()
-  {
-    status = 0;
-    found = "";
-    center.x = 0;
-    center.y = 0;
-    height = 0;
-    width = 0;
-    area = 0;
-    LorR = ' ';
-    number = 0;
-    reason = "";
-    angle = 0;
-    ratio = 0;
-    offby = 0;
-  }
-  void Show(){
-    int W = width;
-    int H = height;
-    std::cout << "Number: " << number << std::endl;
-    std::cout << "\tTarget found?: " << found;
-    if (found == "no"){
-      std::cout << "--" << reason << std::endl;
-    } else {
-      std::cout << "" << std::endl;
-    }
-    if (RatioShow) std::cout << "--Ratio: " << ratio << std::endl;
-    if (SideShow) std::cout << "--Width: " << W << " || Height: " << H << std::endl;
-    if (AngleShow) std::cout << "--Angle: " << angle << std::endl;
-    if (AreaShow) std::cout << "--Area: " << height*width << std::endl;
-    
-  }
-};
 Targets *tLeft;
 Targets *tRight;
+void findAnglePnP(cv::Mat im, Targets *tLeft, Targets *tRight);
 
 //FUNCTIONS----------------------------------------------------------------------
 void on_trackbar(int, void*)
@@ -213,13 +146,12 @@ int findTarget(Mat original, Mat thresholded, Targets *targets)
 
     for (int i = 0; i < contours.size(); i++){
       targets[i].NullTargets();
-
-      //std::cout << " hierarchi = " << hierarchy[i][2] << std::endl;
       if (hierarchy[i][2]!=-1) {if (qdebug>2) printf("failed hierarchy\n"); continue;}
-
       minRect[i] = minAreaRect(Mat(contours[i]));
-      Point2f rect_points[4];
+      cv::Point2f rect_points[4];
       minRect[i].points(rect_points);
+      std::copy(rect_points,rect_points+4,targets[i].points);
+      std::cout<<*targets[i].points<<"\n";
       double w1 = sqrt(pow((rect_points[0].x-rect_points[1].x),2)
 		       + pow((rect_points[0].y-rect_points[1].y),2));
       double w2 = sqrt(pow((rect_points[2].x-rect_points[3].x),2)
@@ -453,6 +385,7 @@ int main(int argc, const char* argv[])
       morphOps(thresholded);
       pthread_mutex_lock(&targetMutex);
       int nt = findTarget(img, thresholded, targets);
+      findAnglePnP(img,tLeft,tRight);
       if (qdebug > 4)std::cout << " found targets = " << nt << std::endl;
       if (nt==2) { //found 2 targets, now to calculations to find distance from them.
 	    
