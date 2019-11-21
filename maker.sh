@@ -1,6 +1,6 @@
 #!/bin/bash
 
-RPI=false;
+RPI=true;
 
 
 #link_frcLib=/home/denis/FRC/opencv/build/lib/
@@ -52,7 +52,8 @@ if [[ ${COMM} == auto ]]; then
     then
 	export LD_LIBRARY_PATH=$run_compLib
     fi
-    
+    echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+    echo "./${FILE}.exe ${PARA} ${PAR1} ${PAR2} ${PAR3} "
     ./${FILE}.exe ${PARA} ${PAR1} ${PAR2} ${PAR3}
     
 
@@ -70,7 +71,7 @@ then
     if [[ "$RPI" == true ]]
     then
 	export LD_LIBRARY_PATH=$link_rpiLib
-	g++ -std=c++11 -I. -I/home/denis/LIBS/opencv40/include/opencv4 -L /home/denis/LIBS/opencv40/lib/ -lopencv_core -lopencv_ml -lopencv_calib3d -lopencv_videoio -lopencv_imgcodecs -lopencv_highgui  -lopencv_imgproc -lpthread  src/main.cpp  src/tcp_thread.cc src/server.cpp src/videoserver.cpp -o ${FILE}.exe -g
+	g++ -std=c++11 -I. -I/home/denis/LIBS/opencv40/include/opencv4 -L /home/denis/LIBS/opencv40/lib/ -lopencv_core -lopencv_ml -lopencv_calib3d -lopencv_videoio -lopencv_imgcodecs -lopencv_highgui  -lopencv_imgproc -lpthread  src/main.cpp  src/tcp_thread.cc src/opencvPnP.cpp src/server.cpp src/videoserver.cpp -o ${FILE}.exe -g
 
 
 	

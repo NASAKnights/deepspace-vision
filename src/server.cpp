@@ -11,7 +11,7 @@
 #include <iostream>
 #include "main.h"
 #include "tcp_thread.h"
-#define MAX 80 
+#define MAXLINE 80 
 #define MLEN 8192
 #define SA struct sockaddr
 int sig_int, sig_hup, sig_alarm, sig_pipe;   
@@ -45,22 +45,22 @@ struct HOST {
 int func(int sockfd, Position *pos) 
 {
   char mesg[MLEN];
-  char buff[MAX]; 
-  char line[MAX]; 
+  char buff[MAXLINE]; 
+  char line[MAXLINE]; 
   int i,ib,il,n,lflg; 
   int lenbuf=0;
   // infinite loop for chat 
   for (;;) { 
-    bzero(line, MAX); 
+    bzero(line, MAXLINE); 
     lflg=0; il=0;
     while(lflg==0) {
       // read the message from client and copy it in buffer 
       //if (debug>3) printf("new loop lflg=%d len=%d \n",lflg,lenbuf);
       if (lenbuf==0) {
-	bzero(buff, MAX); 
+	bzero(buff, MAXLINE); 
 	lenbuf = read(sockfd, buff, sizeof(buff)); 
 	if (lenbuf <= 0) return 1;
-	//tcp_get2(buff, MAX);
+	//tcp_get2(buff, MAXLINE);
 	if (debug>3) printf("got: len=%d %s\n", lenbuf,buff);
       }
       ib=0; 
@@ -81,7 +81,7 @@ int func(int sockfd, Position *pos)
       
     } //-- read line --
     /*
-      int irnd = rand()%1000; bzero(mesg, MAX);
+      int irnd = rand()%1000; bzero(mesg, MAXLINE);
       sprintf(mesg,"dist %f\n",irnd/3.33);
       // print buffer which contains the client contents 
       */

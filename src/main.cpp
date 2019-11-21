@@ -65,7 +65,6 @@ const Scalar BLUE = Scalar(255, 0, 0), RED = Scalar(0,0,255), YELLOW = Scalar(0,
 //threads
 void *opentcp(void *arg);
 void *videoServer(void *arg);
-//void findAnglePnP(cv::Mat im, Targets * targets);
 int remoteSocket = 0;
 int videoPort;
 int videoError = 0;
@@ -152,14 +151,14 @@ int findTarget(Mat original, Mat thresholded, Targets *targets)
       minRect[i].points(rect_points);
       std::copy(rect_points,rect_points+4,targets[i].points);
       std::cout<<*targets[i].points<<"\n";
-      double w1 = sqrt(pow((rect_points[0].x-rect_points[1].x),2)
-		       + pow((rect_points[0].y-rect_points[1].y),2));
-      double w2 = sqrt(pow((rect_points[2].x-rect_points[3].x),2)
-		       + pow((rect_points[2].y-rect_points[3].y),2));
-      double h1 = sqrt(pow((rect_points[1].x-rect_points[2].x),2)
-		       + pow((rect_points[1].y-rect_points[2].y),2));
-      double h2 = sqrt(pow((rect_points[3].x-rect_points[0].x),2)
-		       + pow((rect_points[3].y-rect_points[0].y),2));
+      double w1 = sqrt(pow((rect_points[0].x-rect_points[1].x),2)+
+		       pow((rect_points[0].y-rect_points[1].y),2));
+      double w2 = sqrt(pow((rect_points[2].x-rect_points[3].x),2)+
+		       pow((rect_points[2].y-rect_points[3].y),2));
+      double h1 = sqrt(pow((rect_points[1].x-rect_points[2].x),2)+
+		       pow((rect_points[1].y-rect_points[2].y),2));
+      double h2 = sqrt(pow((rect_points[3].x-rect_points[0].x),2)+
+		       pow((rect_points[3].y-rect_points[0].y),2));
 
       double Width = (w1+w2)/2;
       double Height = (h1+h2)/2;
@@ -385,7 +384,8 @@ int main(int argc, const char* argv[])
       morphOps(thresholded);
       pthread_mutex_lock(&targetMutex);
       int nt = findTarget(img, thresholded, targets);
-      findAnglePnP(img,tLeft,tRight);
+      if (nt==2) findAnglePnP(img,tLeft,tRight);
+      //else       findAnglePnP(img,NULL,NULL); //-- for test only
       if (qdebug > 4)std::cout << " found targets = " << nt << std::endl;
       if (nt==2) { //found 2 targets, now to calculations to find distance from them.
 	    
