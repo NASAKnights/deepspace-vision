@@ -6,7 +6,8 @@ std::vector<cv::Point3d> mod3d;
 std::vector<cv::Point2d> mod2d;
 
 #define USE_LEFT_T
-//#define USE_RIGHT_T
+#define USE_RIGHT_T
+#define USE_OUTER_T
 
 void findAnglePnP(cv::Mat im, Targets *tLeft, Targets *tRight){
   std::vector<cv::Point2d> img2dpoints;
@@ -184,7 +185,7 @@ void findAnglePnP(cv::Mat im, Targets *tLeft, Targets *tRight){
   cv::line(im, tc, axis2D[1], cv::Scalar(0,255,0),2);
   cv::line(im, tc, axis2D[2], cv::Scalar(0,0,255),2);
   cv::imshow("Output", im);
-  cv::waitKey(30);
+  cv::waitKey(300);
 
   
 }
