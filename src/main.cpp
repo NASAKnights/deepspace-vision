@@ -1,4 +1,5 @@
 #include "main.h"
+#include "servoController.h"
 
 /**
  * #FIX // why does that say counter2?
@@ -17,9 +18,9 @@ double MaxRatio = 0.65;
 int MaxDiff = 1000;
 
 int minH = 0;
-int maxH = 175;
+int maxH = 255;//175
 int minS = 0;
-int maxS = 14;
+int maxS = 255;//14
 int minV = 219;//181
 int maxV = 241;//255
 
@@ -41,7 +42,7 @@ bool RatioShow = false;
 //frame counter
 int counter = 0, counter2=0, counter_old=0;
 struct timeval t1, t2;
-int qdebug = 3;
+int qdebug = 0;
 
 //vals
 double alpha;
@@ -150,7 +151,8 @@ int findTarget(Mat original, Mat thresholded, Targets *targets)
       cv::Point2f rect_points[4];
       minRect[i].points(rect_points);
       std::copy(rect_points,rect_points+4,targets[i].points);
-      std::cout<<*targets[i].points<<"\n";
+      if(qdebug>2)
+	std::cout<<*targets[i].points<<"\n";
       double w1 = sqrt(pow((rect_points[0].x-rect_points[1].x),2)+
 		       pow((rect_points[0].y-rect_points[1].y),2));
       double w2 = sqrt(pow((rect_points[2].x-rect_points[3].x),2)+
@@ -332,9 +334,21 @@ inline void nullifyStruct(Position &pos){
 
 int main(int argc, const char* argv[])
 {
+  bool RANDOM = false;
   if(argc>1){
     std::string args = argv[1];
     std::vector<std::string> token;
+    if(args.compare("--help")==0){
+      printf("-c color\n");
+      printf("-t Trackbars\n");
+      printf("-s Server on\n");
+      printf("-o Original\n");
+      printf("-h HSV\n");
+      printf("-b black and white\n");
+      printf("-p print stuff\n");
+      printf("-r random motor move\n");
+      return 0;
+    }
     printf("args size: %d\n",args.size());
     for(int i=1;i<args.size();i++)
       token.push_back(args.substr(i,1));
@@ -353,12 +367,20 @@ int main(int argc, const char* argv[])
 	SHOWT = true;
       if(token[i]=="p")
 	DOPRINT = true;
+      if(token[i]=="r")
+	RANDOM = true;
     }//#FIX
   }
   printf("State:\nUSECOLOR=%d\nSHOWTR=%d\nUSESERVER=%d\n",USECOLOR,SHOWTR,USESERVER);
   printf("DOPRINT=%d\n",DOPRINT);
   Mat img, HSV, thresholded, output;
-
+  LX16ABus * bus = new LX16ABus();
+  bus->openBus("/dev/ttyUSB0");
+  LX16AServo * servo = new LX16AServo(bus,1); // 254=broadcast
+  srand(time(NULL));
+  if(RANDOM){
+    servo->setAngle((int) rand()%1000);
+  }
   int missFR = 0;
   gettimeofday(&t1, NULL);
   videoPort=4097;
