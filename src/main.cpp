@@ -375,12 +375,14 @@ int main(int argc, const char* argv[])
   printf("DOPRINT=%d\n",DOPRINT);
   Mat img, HSV, thresholded, output;
   LX16ABus * bus = new LX16ABus();
+  
   bus->openBus("/dev/ttyUSB0");
   LX16AServo * servo = new LX16AServo(bus,1); // 254=broadcast
   srand(time(NULL));
   if(RANDOM){
     servo->setAngle((int) rand()%1000);
   }
+  servo->setAngle(500);
   int missFR = 0;
   gettimeofday(&t1, NULL);
   videoPort=4097;
