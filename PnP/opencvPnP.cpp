@@ -29,7 +29,29 @@ int main(int argc, const char* argv[]){
   cv::Mat rMat;
   cv::solvePnP(mod3dpoints, img2dpoints, camera_matrix, dist_coeffs, rvec, tvec);
   cv::Rodrigues(rvec,rMat);
+  printf("WHAT\n");
+  std::cout << " focal length = " << focal_length << std::endl;
+  std::cout << " tvec = " << tvec << std::endl;
+  std::cout << " rvec = " << rvec << std::endl;
+  std::cout << " rMat = " << rMat << std::endl;
 
+  cv::Mat rotationVecTest = rMat.t();
+  cv::Rodrigues(rMat.t(),rotationVecTest);
+  cv::Mat tvecT = -rMat.t()*tvec;
+
+  
+  std::cout << rvec << std::endl;
+  printf("\n\n");
+  std::cout << rMat.t() << std::endl;
+  printf("\n\n");
+  std::cout << rMat << std::endl;
+  printf("\n\n");
+  std::cout << rotationVecTest*180./3.151492 << std::endl;
+  printf("\n\n");
+  std::cout << rotationVecTest << "\n:\n" << tvecT << std::endl;
+  printf("\n\n");
+  double* vec = tvecT.ptr<double>();
+  printf("angle:%f\n",atan2(vec[0],-vec[2])*180./3.151492);
   
   double* tv = tvec.ptr<double>();
   cv::Mat rotT=rMat.t();

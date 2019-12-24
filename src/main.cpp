@@ -53,6 +53,7 @@ double FrameWidth;
 double FrameHeight;
 pthread_t MJPEG;
 pthread_t tcpserver;
+pthread_t moveServoThread;
 pthread_t videoServerThread;
 Point centerob;
 float dist;
@@ -66,13 +67,21 @@ const Scalar BLUE = Scalar(255, 0, 0), RED = Scalar(0,0,255), YELLOW = Scalar(0,
 //threads
 void *opentcp(void *arg);
 void *videoServer(void *arg);
+void *moveServo(void *arg);
 int remoteSocket = 0;
 int videoPort;
 int videoError = 0;
 
 Targets *tLeft;
 Targets *tRight;
-void findAnglePnP(cv::Mat im, Targets *tLeft, Targets *tRight);
+void findAnglePnP(cv::Mat im, Targets *tLeft, Targets *tRight, Position *position);
+
+struct ServoArgs{
+  LX16AServo* servo;
+  int angle;
+  
+};
+
 
 //FUNCTIONS----------------------------------------------------------------------
 void on_trackbar(int, void*)
@@ -257,6 +266,16 @@ Mat ThresholdImage(Mat original)
 
 //--------------------------------------------------------------------------------
 
+void *moveServo(void *arg){
+  while(true){
+    ServoArgs* obj = (ServoArgs*) arg;
+    printf("\n\n\nin thread: %d\n\n\n",obj->angle);
+    obj->servo->setAngle(obj->angle * -1);
+    usleep(250*1000);
+  }
+}
+
+
 void *VideoCap(void *args)
 {
   cv::VideoCapture vcap;
@@ -285,10 +304,7 @@ void *VideoCap(void *args)
   vcap.set(cv::CAP_PROP_BRIGHTNESS,100);
   vcap.set(cv::CAP_PROP_AUTO_EXPOSURE, 255);
   FrameWidth = vcap.get(cv::CAP_PROP_FRAME_WIDTH);
-  FrameHeight = vcap.get(cv::CAP_PROP_FRAME_WIDTH);
-  
-  
-  std::cout << "success!" << std::endl;
+  FrameHeight = vcap.get(cv::CAP_PROP_FRAME_HEIGHT);
   
   while (true){
     pthread_mutex_lock(&frameMutex);
@@ -379,10 +395,16 @@ int main(int argc, const char* argv[])
   bus->openBus("/dev/ttyUSB0");
   LX16AServo * servo = new LX16AServo(bus,1); // 254=broadcast
   srand(time(NULL));
+  printf("got here3\n");
+  ServoArgs servoArgs;
+  printf("got here2\n");
+  servoArgs.angle=0;
+  printf("got here\n");
+  servoArgs.servo = servo;
   if(RANDOM){
-    servo->setAngle((int) rand()%1000);
+    pthread_create(&moveServoThread,NULL,moveServo, &servoArgs);
   }
-  servo->setAngle(500);
+  servo->setAngle(0);
   int missFR = 0;
   gettimeofday(&t1, NULL);
   videoPort=4097;
@@ -408,7 +430,7 @@ int main(int argc, const char* argv[])
       morphOps(thresholded);
       pthread_mutex_lock(&targetMutex);
       int nt = findTarget(img, thresholded, targets);
-      if (nt==2) findAnglePnP(img,tLeft,tRight);
+      if (nt==2) findAnglePnP(img,tLeft,tRight,&position);
       //else       findAnglePnP(img,NULL,NULL); //-- for test only
       if (qdebug > 4)std::cout << " found targets = " << nt << std::endl;
       if (nt==2) { //found 2 targets, now to calculations to find distance from them.
@@ -457,13 +479,22 @@ int main(int argc, const char* argv[])
 	  alpha=-alpha;
 
 	//enter values into struct
-	position.z=dist*cos(alpha);
-	position.x=dist*sin(alpha);
-	position.y=tLeft->center.y;
-	position.angle=alpha*180./3.1415;
-	position.dist=dist;
-	position.OffSetx=shiftX; //in inch
-	position.OffSety=   (FrameHeight/2-centerob.y)/dist*2;
+	//position.z=dist*cos(alpha);
+	//position.x=dist*sin(alpha);
+	//position.y=tLeft->center.y;
+	//position.angle=alpha*180./3.1415;
+	//position.dist=dist;
+	//position.OffSetx=shiftX; //in inch
+	//position.OffSety=(FrameHeight/2-centerob.y)/dist*2;
+	
+	if(position.z>55){
+	  position.OffSetx=0.8;
+	  if(position.angle > 0){
+	    position.OffSety = 0.65;
+	  }
+	  else if(position.angle < 0)
+	    position.OffSety = -0.65;
+	}
 
 	//put latest values into avaraging struct, delete old one.
 	posA.push_back(position);
@@ -473,7 +504,6 @@ int main(int argc, const char* argv[])
 	//resetting avarage struct
 	nullifyStruct(positionAV);
 	    
-	    
 	for(it = posA.begin(); it != posA.end(); it++){
 	  //std::cout<< i << ": x = " << (*it).x << std::endl;
 	  positionAV.x+=(*it).x;
@@ -482,7 +512,7 @@ int main(int argc, const char* argv[])
 	  positionAV.angle+=(*it).angle;
 	  positionAV.dist+=(*it).dist;
 	  positionAV.OffSetx+=(*it).OffSetx;
-	  positionAV.OffSety+=(*it).OffSetx;
+	  positionAV.OffSety+=(*it).OffSety;
 	      
 	}
 	positionAV.x/=posA.size();
@@ -492,7 +522,8 @@ int main(int argc, const char* argv[])
 	positionAV.dist/=posA.size();
 	positionAV.OffSetx/=posA.size();
 	positionAV.OffSety/=posA.size();
-	    
+
+	servoArgs.angle = positionAV.angle;
 
 	if (qdebug > 0){
 	  printf("x= %f y= %f z= %f angle= %f Offset= %f\n",position.x,position.y,position.z,position.angle,position.OffSetx);
@@ -509,7 +540,7 @@ int main(int argc, const char* argv[])
 	if(qdebug>1) std::cout << "failed nt = " << nt << std::endl;
 	nullifyStruct(positionAV);
 	positionAV.x=-1;
-	positionAV.z=-1;
+	positionAV.z=0;
 	if (qdebug > 0){
 	  printf("x= %f y= %f z= %f angle= %f Offset= %f\n",position.x,position.y,position.z,position.angle,position.OffSetx);
 	}
@@ -525,15 +556,16 @@ int main(int argc, const char* argv[])
       if(SHOWH)
 	imshow("HSV" , HSV);
       if (qdebug > 0){
-	printf("------------------------------------------------------------\n");
 	if(DOPRINT){
-	  printf("Current: X:%.2f, Y:%.2f, Z:%.2f, ang:%.2f, dist:%.2f, OffX:%.2f, OffY:%.2f\n",position.x, position.y, position.z, position.angle, position.dist, position.OffSetx, position.OffSety);
-	  printf("Avarage: X:%.2f, Y:%.2f, Z:%.2f, ang:%.2f, dist:%.2f, OffX:%.2f, OffY:%.2f\n",positionAV.x, positionAV.y, positionAV.z, positionAV.angle, positionAV.dist, positionAV.OffSetx, positionAV.OffSety);
+      printf("Current: X:%.2f, Y:%.2f, Z:%.2f, ang:%.2f, dist:%.2f, OffX:%.2f, OffY:%.2f\n",position.x, position.y, position.z, position.angle, position.dist, position.OffSetx, position.OffSety);
+      printf("Avarage: X:%.2f, Y:%.2f, Z:%.2f, ang:%.2f, dist:%.2f, OffX:%.2f, OffY:%.2f\n",positionAV.x, positionAV.y, positionAV.z, positionAV.angle, positionAV.dist, positionAV.OffSetx, positionAV.OffSety);
+	printf("------------------------------------------------------------\n");
+        
 	if(position.x>10 || position.x<-10)
 	  printf("dist: %f alpha: %f\n",dist,alpha);
-	}
-	  
       }
+      
+    }
       pthread_mutex_unlock(&targetMutex);
       totalfound.clear();
       counter++;

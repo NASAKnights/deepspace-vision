@@ -289,11 +289,17 @@ public:
   }
 
   bool setAngle(int angle){
-    uint16_t angleTest = ((angle/120)+1)*1000;
-    uint8_t params[] = { (uint8_t)angleTest, (uint8_t)(angle>>8), 500&0xff, 500>>8 };
+    if(angle>90)
+      angle=90;
+    if(angle<-90)
+      angle=-90;
+    angle = angle/90. * 350;
+    angle += 350;
+    uint16_t angleSend = angle;
+    uint8_t params[] = { (uint8_t)angleSend, (uint8_t)(angleSend>>8), 500&0xff, 500>>8 };
     
     bool ok = writeLX(1, params, sizeof(params));
-    printf("Move to %d -> %s\n", angleTest, ok?"OK":"ERR");
+    printf("Move to %d -> %s\n", angleSend, ok?"OK":"ERR");
   }
  
   //private: 
