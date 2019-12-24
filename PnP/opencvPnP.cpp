@@ -72,9 +72,11 @@ int main(int argc, const char* argv[]){
   projectPoints(axis3D, rvec, tvec, camera_matrix, dist_coeffs, axis2D);
   for(int i=0; i < img2dpoints.size(); i++)
     circle(im, img2dpoints[i], 3, cv::Scalar(0,0,255), 2);
+  std::cout << "axis2D: \n" << axis2D << std::endl;
   cv::line(im, center, axis2D[0], cv::Scalar(255,0,0),2);
   cv::line(im, center, axis2D[1], cv::Scalar(0,255,0),2);
   cv::line(im, center, axis2D[2], cv::Scalar(0,0,255),2);
+  std::cout << im.cols << ":" << im.rows<< std::endl;
   cv::imshow("Output", im);
   cv::waitKey(0);
 

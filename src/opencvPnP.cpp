@@ -216,10 +216,15 @@ for(int i=0; i < mod3d.size(); i++) {
   printf("\n\n");
   std::cout << rMat << std::endl;
   printf("\n\n");
-  std::cout << rotationVecTest*180./3.151492 << std::endl;
-  printf("\n\n");
   std::cout << rotationVecTest << "\n:\n" << tvecT << std::endl;
   printf("\n\n");
+
+  double* transvec = tvec.ptr<double>();
+  double distance = sqrt(transvec[0]*transvec[0]+transvec[2]*transvec[2]);
+  double angle = atan2(transvec[0],transvec[2]);
+  cv::Mat xWorldd = -rMat.t()*tvec;
+  double* xWorld = xWorldd.ptr<double>();
+  double angle2 = atan2(xWorld[0],-xWorld[2]);
 
   
   double* tv = tvec.ptr<double>();
@@ -235,12 +240,12 @@ for(int i=0; i < mod3d.size(); i++) {
   double* tvecT2 = tvecT.ptr<double>();
   double* rvecT2 = rotationVecTest.ptr<double>();
   double alpha3 = atan2(tvecT2[0],-tvecT2[2]);
-  std::cout << "angle Test:" << rvecT2[1]*180./3.151492 << std::endl;
+  //std::cout << "angle Test:" << rvecT2[1]*180./3.151492 << std::endl;
   if(debugPnP>0)
     //printf("rme x=%f y=%f z=%f alpha=%f \n",vme[0],vme[1],vme[2],alpha*180./3.14159);
     //printf("R-pos: x=%f y=%f z=%f alpha=%f \n",rpos[0],rpos[1],rpos[2],alpha2*180./3.14159);
-    
-    printf("NEW:  x=%f y=%f z=%f dist=%f alpha=%f \n",tvecT2[0],tvecT2[1],tvecT2[2],sqrt(tvecT2[0]*tvecT2[0]+tvecT2[2]*tvecT2[2]),alpha3*180./3.141592);
+    printf("NEW:  dist=%f angle=%f angle2=%f\n",distance,angle*180./3.151492,angle2*180./3.151492);
+  //printf("NEW:  x=%f y=%f z=%f dist=%f alpha=%f \n",tvecT2[0],tvecT2[1],tvecT2[2],sqrt(tvecT2[0]*tvecT2[0]+tvecT2[2]*tvecT2[2]),alpha3*180./3.141592);
   //printf("******************************\n");
   //std::cout << " tvec = \n" << tvec << std::endl;
   //std::cout << " rvec = \n" << rvec << std::endl;
@@ -253,19 +258,20 @@ for(int i=0; i < mod3d.size(); i++) {
   
   std::vector<cv::Point3d> axis3D;
   std::vector<cv::Point2d> axis2D;
-  axis3D.push_back(cv::Point3d(1.,0,0));
-  axis3D.push_back(cv::Point3d(0,1.,0));
-  axis3D.push_back(cv::Point3d(0,0,1.));
-  projectPoints(axis3D, rotationVecTest, tvecT, camera_matrix, dist_coeffs, axis2D);
+  axis3D.push_back(cv::Point3d(10.,0,0));
+  axis3D.push_back(cv::Point3d(0,10.,0));
+  axis3D.push_back(cv::Point3d(0,0,-10.));
+  projectPoints(axis3D, rvec, tvec, camera_matrix, dist_coeffs, axis2D);
   if(debugPnP>3)
     std::cout << " axis 2D = " << axis2D << std::endl;
   for(int i=0; i < img2dpoints.size (); i++){
     circle(im, img2dpoints[i], i*3, cv::Scalar(0,0,255), 2);
   }
   cv::Point2d tc((tLeft->center.x+tRight->center.x)/2.,(tLeft->center.y+tRight->center.y)/2.);
-  cv::line(im, tc, axis2D[0], cv::Scalar(255,0,0),5);//x-blue
-  cv::line(im, tc, axis2D[1], cv::Scalar(0,255,0),5);//y-green
-  cv::line(im, tc, axis2D[2], cv::Scalar(0,0,255),5);//z-red
+  cv::line(im, tc, axis2D[0], cv::Scalar(255,0,0),2);//x-blue
+  cv::line(im, tc, axis2D[1], cv::Scalar(0,255,0),2);//y-green
+  cv::line(im, tc, axis2D[2], cv::Scalar(0,0,255),2);//z-red
+  cv::circle(im,center,4,cv::Scalar(255,255,255),2);
   if(showImg==1){
   cv::imshow("Output", im);
     cv::waitKey(3000);
