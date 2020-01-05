@@ -18,16 +18,17 @@
 #include <sys/ioctl.h>
 #include <net/if.h>
 #include <sys/time.h>
+#include <pigpio.h>
 typedef struct
 {
   double x;
-  double y;
   double z;
-  double angle;
   double dist;
+  double angle;
+  double angle2;
   double OffSetx;
-  double OffSety;
-  bool fail;
+  double speed;
+  double turn;
 }Position;
 
 

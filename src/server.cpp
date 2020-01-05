@@ -89,8 +89,7 @@ int func(int sockfd, Position *pos)
     if (debug > 0)
       printf("From client: len=%d %s\t To client : size=%d string:%s \n", il,line,strlen(mesg),mesg); 
     //printf("BP4");
-    sprintf(&mesg[strlen(mesg)],"%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,",pos->x, pos->y, pos->z
-	    , pos->angle, pos->dist, pos->OffSetx, pos->OffSety);
+    sprintf(&mesg[strlen(mesg)],"%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,",pos->x, pos->z, pos->dist, pos->angle, pos->angle2, pos->OffSetx, pos->speed, pos->turn);
     if(strlen(mesg)>MLEN){
       printf("..........error........\n");
       exit(1);

@@ -14,12 +14,15 @@ ifeq  ($(shell uname -m),armv7l)
     PLATFORM = RPI
 endif
 ifeq  ($(shell uname -m),x86_64)
-    INCS = -I src -I ~/LIBS/opencv40/inclide
+    INCS = -I src -I ~/LIBS/opencv40/include
     PLIBS = ~/LIBS/opencv40/lib/
     PLATFORM = LAPTOP
 endif
+INCS = -I src -I /home/denis/LIBS/opencv40/include/opencv4
+PLIBS = /home/denis/LIBS/opencv40/lib/
+#PLATFORM = LAPTOP
 
-LIBS = -L $(PLIBS) -lopencv_core -lopencv_ml -lopencv_calib3d -lopencv_videoio -lopencv_imgcodecs -lopencv_highgui  -lopencv_imgproc -lpthread 
+LIBS = -L $(PLIBS) -lopencv_core -lopencv_ml -lopencv_calib3d -lopencv_videoio -lopencv_imgcodecs -lopencv_highgui  -lopencv_imgproc -lpthread -lpigpio
 
 all:  main 
 
@@ -40,9 +43,10 @@ vpath           %.cpp $(SRCDIR)
 	$(CC) $(CFLAGS)  ${INCS} -c $<  
 
 MAIN_OBJ = main.o tcp_thread.o opencvPnP.o server.o videoserver.o
-main:   ${MAIN_OBJ}
+main:   ${MAIN_OBJ} src/servoController.h
 	${CC} ${CFLAGS} ${INCS} -o $@.exe ${MAIN_OBJ}  ${LIBS}
-	@echo "export LD_LIBRARY_PATH=$(PLIBS) " > env.sh
+	@echo "export LD_LIBRARY_PATH=$(PLIBS)" > env.sh
+	@echo "stty -F /dev/ttyUSB0 115200" >> env.sh
 
 clnt:   clnt.o
 	${CC} ${CFLAGS} -o $@.exe clnt.o 

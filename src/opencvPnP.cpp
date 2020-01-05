@@ -11,6 +11,7 @@ int showImg = 0;
 #define USE_LEFT_T
 #define USE_RIGHT_T
 //#define USE_OUTER_T
+bool useBoth = true;
 
 void findAnglePnP(cv::Mat im, Targets *tLeft, Targets *tRight,Position* position){
   std::vector<cv::Point2d> img2dpoints;
@@ -131,11 +132,11 @@ void findAnglePnP(cv::Mat im, Targets *tLeft, Targets *tRight,Position* position
 	std::cout << "boxMrot = " << boxMrot << std::endl;
       cv::Point2d bp(boxMrot);
 #ifdef USE_LEFT_T
-      //if(i==1||i==2){
+      if(i==1||i==2||useBoth){
 	cv::Point2d bps=bp+shiftL;
 	mod2d.push_back((bps)*zoom+shiftG);
 	mod3d.push_back(cv::Point3d(bps.x,bps.y,0.));
-	//}
+	}
 #endif
     }
 
@@ -151,11 +152,11 @@ void findAnglePnP(cv::Mat im, Targets *tLeft, Targets *tRight,Position* position
 	std::cout << "boxMrot = " << boxMrot << std::endl;
       cv::Point2d bp(boxMrot);
 #ifdef USE_RIGHT_T
-      //if(i==0||i==3){
+      if(i==0||i==3 || useBoth){
 	cv::Point2d bps=bp+shiftR;
 	mod2d.push_back((bps)*zoom+shiftG);
 	mod3d.push_back(cv::Point3d(bps.x,bps.y,0.));
-	//}327 285
+	}
 #endif
     }
    } //--- end model build
@@ -180,7 +181,7 @@ void findAnglePnP(cv::Mat im, Targets *tLeft, Targets *tRight,Position* position
    */
 for(int i=0; i < mod3d.size(); i++) {
   //circle(im, mod2d[i], i, cv::Scalar(0,255,0), 2);
-    circle(im, cv::Point2d(mod3d[i].x*9+300,mod3d[i].y*9+260), i, cv::Scalar(255,0,0), 2);
+    circle(im, cv::Point2d(mod3d[i].x*9+center.x,mod3d[i].y*9+center.y+20), i, cv::Scalar(255,255,0), 2);
     
   }
   //-----------  initialization of camera -------------
@@ -193,31 +194,39 @@ for(int i=0; i < mod3d.size(); i++) {
   cv::Mat rvec;
   cv::Mat tvec;
   cv::Mat rMat;
-  cv::solvePnP(mod3d, img2dpoints, camera_matrix, dist_coeffs, rvec, tvec, false, cv::SOLVEPNP_ITERATIVE);
+  //cv::solvePnP(mod3d, img2dpoints, camera_matrix, dist_coeffs, rvec, tvec, false, cv::SOLVEPNP_ITERATIVE);
+  cv::solvePnP(mod3d, img2dpoints, camera_matrix, dist_coeffs, rvec, tvec);
   //cv::solvePnP(mod3d, img2dpoints, camera_matrix, dist_coeffs, rvec, tvec, false, cv::SOLVEPNP_DLS);
   //cv::solvePnP(mod3d, img2dpoints, camera_matrix, dist_coeffs, rvec, tvec, false, cv::SOLVEPNP_UPNP); 
   cv::Rodrigues(rvec,rMat);
+  /*
   if(debugPnP>0){
     std::cout << " focal length = " << focal_length << std::endl;
     std::cout << " tvec = " << tvec << std::endl;
     std::cout << " rvec = " << rvec << std::endl;
     std::cout << " rMat = " << rMat << std::endl;
   }
-  std::cout << "mod3d: " << mod3d << std::endl;
+  */
 
   
   cv::Mat rotationVecTest;
   cv::Rodrigues(rMat.t(),rotationVecTest);
   cv::Mat tvecT = -rMat.t()*tvec;
 
+  /*
   std::cout << rvec << std::endl;
   printf("\n\n");
   std::cout << rMat.t() << std::endl;
   printf("\n\n");
   std::cout << rMat << std::endl;
   printf("\n\n");
+  
   std::cout << rotationVecTest << "\n:\n" << tvecT << std::endl;
   printf("\n\n");
+  */
+
+
+  //-----std::cout << rvec << "\n:\n" << tvec << std::endl;
 
   double* transvec = tvec.ptr<double>();
   double distance = sqrt(transvec[0]*transvec[0]+transvec[2]*transvec[2]);
@@ -225,35 +234,43 @@ for(int i=0; i < mod3d.size(); i++) {
   cv::Mat xWorldd = -rMat.t()*tvec;
   double* xWorld = xWorldd.ptr<double>();
   double angle2 = atan2(xWorld[0],-xWorld[2]);
-
   
-  double* tv = tvec.ptr<double>();
-  cv::Mat rotT=rMat.t();
-  cv::Point3d me(0,0,200);//200
-  cv::Mat mme = (cv::Mat_<double>(3,1) << me.x, me.y, me.z);
-  cv::Mat rme = rMat*mme;
-  double* vme = rme.ptr<double>();
-  double* rpos = tvec.ptr<double>();
-  double alpha = atan2(vme[0],vme[2]);
-  double alpha2 = atan2(rpos[0],rpos[2]);
-  cv::Point3d p3me(vme[0],vme[1],vme[2]);
-  double* tvecT2 = tvecT.ptr<double>();
-  double* rvecT2 = rotationVecTest.ptr<double>();
-  double alpha3 = atan2(tvecT2[0],-tvecT2[2]);
-  //std::cout << "angle Test:" << rvecT2[1]*180./3.151492 << std::endl;
-  if(debugPnP>0)
+  /*
+    double* tv = tvec.ptr<double>();
+    cv::Mat rotT=rMat.t();
+    cv::Point3d me(0,0,200);//200
+    cv::Mat mme = (cv::Mat_<double>(3,1) << me.x, me.y, me.z);
+    cv::Mat rme = rMat*mme;
+    double* vme = rme.ptr<double>();
+    double* rpos = tvec.ptr<double>();
+    double alpha = atan2(vme[0],vme[2]);
+    double alpha2 = atan2(rpos[0],rpos[2]);
+    cv::Point3d p3me(vme[0],vme[1],vme[2]);
+    double* tvecT2 = tvecT.ptr<double>();
+    double* rvecT2 = rotationVecTest.ptr<double>();
+    double alpha3 = atan2(tvecT2[0],-tvecT2[2]);
+    //std::cout << "angle Test:" << rvecT2[1]*180./3.151492 << std::endl;
+    if(debugPnP>0)
     //printf("rme x=%f y=%f z=%f alpha=%f \n",vme[0],vme[1],vme[2],alpha*180./3.14159);
     //printf("R-pos: x=%f y=%f z=%f alpha=%f \n",rpos[0],rpos[1],rpos[2],alpha2*180./3.14159);
-    printf("NEW:  dist=%f angle=%f angle2=%f\n",distance,angle*180./3.151492,angle2*180./3.151492);
+    */
+
+
+  
+  //---printf("NEW:  dist=%f angle=%f angle2=%f\n",distance,angle*180./3.151492,angle2*180./3.151492);
+
+  
   //printf("NEW:  x=%f y=%f z=%f dist=%f alpha=%f \n",tvecT2[0],tvecT2[1],tvecT2[2],sqrt(tvecT2[0]*tvecT2[0]+tvecT2[2]*tvecT2[2]),alpha3*180./3.141592);
   //printf("******************************\n");
   //std::cout << " tvec = \n" << tvec << std::endl;
   //std::cout << " rvec = \n" << rvec << std::endl;
-  position->x=tvecT2[0];
-  position->y=tvecT2[1];
-  position->z=tvecT2[2];
-  position->angle=alpha3*180/3.141592;
-  position->dist = sqrt(tvecT2[0]*tvecT2[0]+tvecT2[2]*tvecT2[2]);
+  cv::Point2d tc((tLeft->center.x+tRight->center.x)/2.,(tLeft->center.y+tRight->center.y)/2.);
+  position->x=sin(angle2)*distance;
+  position->z=cos(angle2)*distance;
+  position->dist=distance;
+  position->angle=angle*180/3.141592;
+  position->angle2=angle2*180/3.141592;
+  position->OffSetx=tc.x-center.x;
 
   
   std::vector<cv::Point3d> axis3D;
@@ -267,17 +284,16 @@ for(int i=0; i < mod3d.size(); i++) {
   for(int i=0; i < img2dpoints.size (); i++){
     circle(im, img2dpoints[i], i*3, cv::Scalar(0,0,255), 2);
   }
-  cv::Point2d tc((tLeft->center.x+tRight->center.x)/2.,(tLeft->center.y+tRight->center.y)/2.);
   cv::line(im, tc, axis2D[0], cv::Scalar(255,0,0),2);//x-blue
   cv::line(im, tc, axis2D[1], cv::Scalar(0,255,0),2);//y-green
   cv::line(im, tc, axis2D[2], cv::Scalar(0,0,255),2);//z-red
   cv::circle(im,center,4,cv::Scalar(255,255,255),2);
   if(showImg==1){
-  cv::imshow("Output", im);
+    cv::imshow("Output", im);
     cv::waitKey(3000);
   }
   else if(showImg==2){
-  cv::imshow("Output", im);
+    cv::imshow("Output", im);
     cv::waitKey(5000);
   }
 

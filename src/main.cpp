@@ -1,13 +1,8 @@
 #include "main.h"
 #include "servoController.h"
 
-/**
- * #FIX // why does that say counter2?
- *
- */
-
-
 using namespace cv;
+
 
 #define MAXTARGETS 20
 #define ASIZE 10
@@ -33,12 +28,6 @@ bool SHOWTR = false;
 bool USESERVER = false;
 bool USECOLOR = false;
 bool DOPRINT = false;
-/*
-bool SideShow = false;
-bool AngleShow = false;
-bool AreaShow = false;
-bool RatioShow = false;
-*/
 //frame counter
 int counter = 0, counter2=0, counter_old=0;
 struct timeval t1, t2;
@@ -55,6 +44,7 @@ pthread_t MJPEG;
 pthread_t tcpserver;
 pthread_t moveServoThread;
 pthread_t videoServerThread;
+pthread_t i2cSlaveThread;
 Point centerob;
 float dist;
 pthread_mutex_t frameMutex = PTHREAD_MUTEX_INITIALIZER;
@@ -68,6 +58,7 @@ const Scalar BLUE = Scalar(255, 0, 0), RED = Scalar(0,0,255), YELLOW = Scalar(0,
 void *opentcp(void *arg);
 void *videoServer(void *arg);
 void *moveServo(void *arg);
+void *i2cSlave(void *arg);
 int remoteSocket = 0;
 int videoPort;
 int videoError = 0;
@@ -79,7 +70,7 @@ void findAnglePnP(cv::Mat im, Targets *tLeft, Targets *tRight, Position *positio
 struct ServoArgs{
   LX16AServo* servo;
   int angle;
-  
+  int readAngle;
 };
 
 
@@ -127,7 +118,6 @@ int findTarget(Mat original, Mat thresholded, Targets *targets)
   findContours(thresholded, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
 
   //------------- preselect by perimetr ------------------
-  //std::cout << "initial targets = " << contours.size() << std::endl;
   for (std::vector<std::vector<Point> >::iterator it = contours.begin(); it != contours.end();){
     if (it->size() < 10){//min contour
       it = contours.erase(it);
@@ -198,13 +188,8 @@ int findTarget(Mat original, Mat thresholded, Targets *targets)
 
       double RRatio = Width / Height;
       targets[i].ratio=RRatio;
- 
-      //if (area<200) {if (qdebug == 0)printf("failed area\n");continue;}
-
       if ( MinRatio >  RRatio || RRatio > MaxRatio ){if (qdebug>2) printf("failed ratio : %f \n",RRatio); continue;}
- 
-      //if (abs(angle)<10) continue; 
-
+      
       double ang1=15, ang2=75;
       if ( abs(abs(angle)-ang1)>20 && abs(abs(angle)-ang2)>20 ){if (qdebug>2) printf("failed angle\n"); continue;}
 
@@ -223,8 +208,6 @@ int findTarget(Mat original, Mat thresholded, Targets *targets)
 	double dx = xi - xk;
 	double dy = yi - yk;
 
-	//std::cout << " i,k = " << i << " " << k <<  " dx = " << dx << " dy = " << dy << std::endl;
-	//std::cout << " area  = " << targets[i].area << " " << targets[k].area << std::endl;
 	ttt++;
 	if ( abs(dy)>40 ) {if (qdebug>3) printf("failed distance: %f: %d\n",dy,ttt);continue;}
 	double arr = targets[i].area/targets[k].area;
@@ -269,7 +252,6 @@ Mat ThresholdImage(Mat original)
 void *moveServo(void *arg){
   while(true){
     ServoArgs* obj = (ServoArgs*) arg;
-    printf("\n\n\nin thread: %d\n\n\n",obj->angle);
     obj->servo->setAngle(obj->angle * -1);
     usleep(250*1000);
   }
@@ -311,42 +293,108 @@ void *VideoCap(void *args)
     vcap.read(frame);
     pthread_mutex_unlock(&frameMutex);
     newFrame = true;
-    usleep(33000);
+    usleep(33000);//33000
   }
 }
 
-//--------------------------------------------------------------------------------
-
-void calcTarget()
-{
-  if (qdebug > 1){
-    if (tLeft->area > tRight->area)
-      std::cout << "turn left" << std::endl;
-    else 
-      std::cout << "turn right" << std::endl;
-    if ((tLeft->center.x > FrameWidth/2-160 && tLeft->center.x < FrameWidth/2) && (tRight->center.x < FrameWidth/2+160 && tRight->center.x > FrameWidth/2))
-      std::cout << "stay on track" << std::endl;
-    else if (tLeft->center.x < FrameWidth/2)
-      std:: cout << "move left" << std::endl;
-    else if (tRight->center.x > FrameWidth/2)
-      std::cout << "move right" << std::endl;
-  }
-  centerob.x = (tRight->center.x-tLeft->center.x)/2+tLeft->center.x;
-  centerob.y = (tRight->center.y-tLeft->center.y)/2+tLeft->center.y;
-  int testq; 
-}
 //-----------------------------------------------------------------------------
 inline void nullifyStruct(Position &pos){
   pos.x=0;
-  pos.y=0;
   pos.z=0;
-  pos.angle=0;
   pos.dist=0;
+  pos.angle=0;
+  pos.angle2=0;
   pos.OffSetx=0;
-  pos.OffSety=0;
+  pos.speed=0;
+  pos.turn=0;
+}
+//#define USE_I2C
+#ifdef USE_I2C
+int getControlBits(int address /* max 127 */, bool open) {
+  int flags;
+  if(open)
+    flags = /*RE:*/ (1 << 9) | /*TE:*/ (1 << 8) | /*I2:*/ (1 << 2) | /*EN:*/ (1 << 0);
+  else // Close/Abort
+    flags = /*BK:*/ (1 << 7) | /*I2:*/ (0 << 2) | /*EN:*/ (0 << 0);
+
+  return (address << 16 /*= to the start of significant bits*/) | flags;
 }
 
-
+void *i2cSlave(void *arg){
+  float *angleGyro = (float*) arg;
+  const int slaveAddress = 0x04;
+  bsc_xfer_t xfer;
+  printf("gpioInit: %d\n",gpioInitialise());
+  usleep(1000*1000);
+  std::cout << "Initialized GPIOs\n";
+  // Close old device (if any)
+  xfer.control = getControlBits(slaveAddress, false); // To avoid conflicts when restarting
+  printf("after getBits\n");
+  bscXfer(&xfer);
+  printf("after bsc\n");
+  xfer.control = getControlBits(slaveAddress, true);
+  printf("after getContBits\n");
+  int status = bscXfer(&xfer); // Should now be visible in I2C-Scanners
+  printf("after bscXger\n");
+  //std::string data = NULL;
+  if (status >= 0)
+    {
+      std::cout << "Opened slave\n";
+      xfer.rxCnt = 0;
+      printf("before loop\n");
+      int counter_i2c = 0;
+      while(1){
+	counter_i2c++;
+	if(counter_i2c % 1000000 == 0){
+	  printf("in loop1 %d\n",counter_i2c);
+	}
+	bscXfer(&xfer);
+	if(xfer.rxCnt > 0) {
+	  unsigned char cmd[64];
+	  std::cout << "Received " << xfer.rxCnt << " bytes: ";// << (char*)xfer.rxBuf;
+	  float roll, pitch, yaw;
+	  sscanf(xfer.rxBuf,"%f,%f,%f",&roll,&pitch,&yaw);
+	  printf("%f,%f,%f\n",roll/100.,pitch/100.,yaw/100.);
+	  *angleGyro=yaw/100.0f;
+	}
+	//if (xfer.rxCnt > 0){
+	//    cout << xfer.rxBuf;
+	//}
+      }
+    }else
+    std::cout << "Failed to open slave!!!\n";
+  printf("thread gone\n");
+}
+#else
+void* i2cSlave(void* arg){
+  float *angleGyro = (float*) arg;
+  //printf("enter gyro slave\n");
+  int ttyFid = open("/dev/ttyUSB0", O_RDWR);
+  if (ttyFid == -1){
+    printf( "Error unable to open port\n");
+  }
+  //printf("enter readBus\n");
+  unsigned char ch;
+  int ret;
+  char line[256];
+  int counterGyro = 0;
+  while(true){
+    for(int ii=0;ii<200;ii++){
+      int nb = read(ttyFid,&line[ii],1);
+      if(nb!=1)
+	printf("nb=%d %c\n",nb,ch);
+      if(nb<0){sleep(1); ii=11; continue;}
+      if(line[ii]=='\n') {line[ii+1]=0; break;}
+    }
+    //printf("line=%s\n",line);
+    float roll, pitch, yaw;
+    sscanf(line,"%f,%f,%f",&roll,&pitch,&yaw);
+    if(!(counterGyro++ % 20))
+      printf("angles: %f,%f,%f\n",roll/100.,pitch/100.,yaw/100.);
+    *angleGyro=yaw/100.0f;
+  }
+}
+#endif
 
 int main(int argc, const char* argv[])
 {
@@ -362,7 +410,7 @@ int main(int argc, const char* argv[])
       printf("-h HSV\n");
       printf("-b black and white\n");
       printf("-p print stuff\n");
-      printf("-r random motor move\n");
+      printf("-r use the servo\n");
       return 0;
     }
     printf("args size: %d\n",args.size());
@@ -391,20 +439,22 @@ int main(int argc, const char* argv[])
   printf("DOPRINT=%d\n",DOPRINT);
   Mat img, HSV, thresholded, output;
   LX16ABus * bus = new LX16ABus();
+  float angleGyro = 0;
+  float fixedAngle = 0;
   
   bus->openBus("/dev/ttyUSB0");
   LX16AServo * servo = new LX16AServo(bus,1); // 254=broadcast
   srand(time(NULL));
-  printf("got here3\n");
-  ServoArgs servoArgs;
-  printf("got here2\n");
-  servoArgs.angle=0;
-  printf("got here\n");
-  servoArgs.servo = servo;
   if(RANDOM){
+    ServoArgs servoArgs;
+    servoArgs.angle=0;
+    servoArgs.servo = servo;
     pthread_create(&moveServoThread,NULL,moveServo, &servoArgs);
+    int rc = pthread_setname_np(moveServoThread,"MoveServoThread");
+    if (rc != 0)
+      printf("servo thread fail%d\n",rc);
+    
   }
-  servo->setAngle(0);
   int missFR = 0;
   gettimeofday(&t1, NULL);
   videoPort=4097;
@@ -414,7 +464,24 @@ int main(int argc, const char* argv[])
   Targets targets[MAXTARGETS];
   pthread_create(&tcpserver, NULL, opentcp, &positionAV);
   pthread_create(&MJPEG, NULL, VideoCap, NULL);
-  if(USESERVER) pthread_create(&videoServerThread, NULL, videoServer, NULL);
+  pthread_create(&i2cSlaveThread, NULL, i2cSlave,&angleGyro);
+  int rc = pthread_setname_np(MJPEG, "MJPEG Thread");
+  if (rc != 0)
+    printf("MJPEG thread fail%d\n",rc);
+  rc = pthread_setname_np(tcpserver, "tcpserver");
+  if (rc != 0)
+    printf("tcp thread fail%d\n",rc);
+  rc = pthread_setname_np(i2cSlaveThread,"GyroThread");
+  if (rc != 0)
+    printf("gyro thread fail%d\n",rc);
+  
+  if(USESERVER) {
+    pthread_create(&videoServerThread, NULL, videoServer, NULL);
+    rc = pthread_setname_np(videoServerThread,"VideoServerThread");
+    if (rc != 0)
+      printf("video thread fail%d\n",rc);
+  }
+
   if(SHOWTR) createTrackbars();
   if(!img.isContinuous()) img = img.clone();
   //set all values to 0 before program begins in loop forever.
@@ -430,107 +497,137 @@ int main(int argc, const char* argv[])
       morphOps(thresholded);
       pthread_mutex_lock(&targetMutex);
       int nt = findTarget(img, thresholded, targets);
-      if (nt==2) findAnglePnP(img,tLeft,tRight,&position);
-      //else       findAnglePnP(img,NULL,NULL); //-- for test only
+      nullifyStruct(position);
+      
+      if (nt==2)
+	findAnglePnP(img,tLeft,tRight,&position);
+      
       if (qdebug > 4)std::cout << " found targets = " << nt << std::endl;
-      if (nt==2) { //found 2 targets, now to calculations to find distance from them.
-	    
+      if (nt==2) {
+	
 	//tLeft->Show();
 	//tRight->Show();
 	//====================================================================
 	//   calculations 
 	//====================================================================
-
-	double ScalingDist = 60.; // 
-	double HeightScalar = 62*ScalingDist; // size in pix to cm
-	double WidthScalar =  33*ScalingDist; // size in pix to cm
-	float d1 = HeightScalar/tLeft->height;
-	float d2 = HeightScalar/tRight->height;
-	//------ area version -----
-	double KS=60;   // inches
-	double S0=1480; // area at this distance 
-	double s1=tLeft->area;
-	double s2=tRight->area;
-	double cs1 = s1/(S0*KS*KS/(d1*d1)); if (cs1>1.) cs1=0.9999;
-	double cs2 = s2/(S0*KS*KS/(d2*d2)); if (cs2>1.) cs2=0.9999;
-	double z0=(d1*cs1+d2*cs2)/2.;
-	double sn1=sqrt(1-cs1*cs1);
-	double sn2=sqrt(1-cs2*cs2);
-	double x0=(d1*sn1+d2*sn2)/2.;
-	double d00=sqrt(x0*x0+z0*z0);
-	alpha = atan2(x0,z0);// 180./3.1415;
-	double offsetX=(FrameWidth/2-centerob.x);
-	double KX=4./3.;
-	double shiftX=offsetX*KX/d00;
-	
-	
-	if (d1<d2) x0=-x0;
-	if(qdebug > 2){
+	/*
+	  double ScalingDist = 60.; // 
+	  double HeightScalar = 62*ScalingDist; // size in pix to cm
+	  double WidthScalar =  33*ScalingDist; // size in pix to cm
+	  float d1 = HeightScalar/tLeft->height;
+	  float d2 = HeightScalar/tRight->height;
+	  //------ area version -----
+	  double KS=60;   // inches
+	  double S0=1480; // area at this distance 
+	  double s1=tLeft->area;
+	  double s2=tRight->area;
+	  double cs1 = s1/(S0*KS*KS/(d1*d1)); if (cs1>1.) cs1=0.9999;
+	  double cs2 = s2/(S0*KS*KS/(d2*d2)); if (cs2>1.) cs2=0.9999;
+	  double z0=(d1*cs1+d2*cs2)/2.;
+	  double sn1=sqrt(1-cs1*cs1);
+	  double sn2=sqrt(1-cs2*cs2);
+	  double x0=(d1*sn1+d2*sn2)/2.;
+	  double d00=sqrt(x0*x0+z0*z0);
+	  alpha = atan2(x0,z0);// 180./3.1415;
+	  double offsetX=(FrameWidth/2-centerob.x);
+	  double KX=4./3.;
+	  double shiftX=offsetX*KX/d00;
+	  
+	  
+	  if (d1<d2) x0=-x0;
+	  if(qdebug > 2){
 	  printf("Height: %.2f, %.2f\n"
-		 "Width: %.2f, %.2f\n"
-		 "==>  s= %.2f %.2f cs= %.2f %.2f s0= %.2f %.2f\n"
-		 "==>  x0 = %.2f z0= %.2f d00= %.2f al2= %.2f\n"
-		 "==>  offset = %.2f shift %.2f\n"
-		 ,tLeft->height,tRight->height,tLeft->width,tRight->width,s1,s2,cs1,cs2,S0*KS*KS/(d1*d1),S0*KS*KS/(d1*d1),x0,z0,d00,alpha,offsetX,shiftX);
-	}
-	    
-	dist = d00;
-	if (d1<d2) 
-	  alpha=-alpha;
-
-	//enter values into struct
-	//position.z=dist*cos(alpha);
-	//position.x=dist*sin(alpha);
-	//position.y=tLeft->center.y;
-	//position.angle=alpha*180./3.1415;
-	//position.dist=dist;
-	//position.OffSetx=shiftX; //in inch
-	//position.OffSety=(FrameHeight/2-centerob.y)/dist*2;
-	
-	if(position.z>55){
-	  position.OffSetx=0.8;
-	  if(position.angle > 0){
-	    position.OffSety = 0.65;
+	  "Width: %.2f, %.2f\n"
+	  "==>  s= %.2f %.2f cs= %.2f %.2f s0= %.2f %.2f\n"
+	  "==>  x0 = %.2f z0= %.2f d00= %.2f al2= %.2f\n"
+	  "==>  offset = %.2f shift %.2f\n"
+	  ,tLeft->height,tRight->height,tLeft->width,tRight->width,s1,s2,cs1,cs2,S0*KS*KS/(d1*d1),S0*KS*KS/(d1*d1),x0,z0,d00,alpha,offsetX,shiftX);
 	  }
-	  else if(position.angle < 0)
-	    position.OffSety = -0.65;
+	  
+	  dist = d00;
+	  if (d1<d2) 
+	  alpha=-alpha;
+	  
+	  
+	  //enter values into struct
+	  //position.z=dist*cos(alpha);
+	  //position.x=dist*sin(alpha);
+	  //position.y=tLeft->center.y;
+	  //position.angle=alpha*180./3.1415;
+	  //position.dist=dist;
+	  //position.OffSetx=shiftX; //in inch
+	  //position.OffSety=(FrameHeight/2-centerob.y)/dist*2;
+	  */
+	/*
+	//if(position.OffSetx < 200 && position.OffSetx > -200){
+	
+	if(position.angle < 0)
+	servoArgs.angle-=3;
+	else if(position.angle > 0)
+	servoArgs.angle+=3;
+	*/
+	//servoArgs.angle=position.angle;
+	/*
+	  alphaMax=(50./2.)-atan2(15,dist);//50 cam angle view, 15 half of target size
+	  
+	  }
+	  else{
+	  printf("\n\nGOING TO GO OFF SCREEN angle\n\n");
+	  }
+	*/
+        
+	
+	//---printf("angleServo=%d\n",servoArgs.angle);
+	
+	if(fixedAngle == 0)
+	  fixedAngle = position.angle+angleGyro;
+	printf("fixed angle %f\n",fixedAngle);
+	
+	
+	
+	
+	if(position.OffSetx < 200 && position.OffSetx > -200){
+	  if(position.dist>75){
+	    position.speed=0.55;
+	    //position.turn = std::max(-0.75,std::min(position.angle/26.6,.75));//.85
+	  }
 	}
-
+	if(-angleGyro>fixedAngle)
+	  position.turn = -0.65;
+	else if(-angleGyro<fixedAngle)
+	  position.turn = 0.65;
+	
+	printf("angleGyro: %f\n",angleGyro);
 	//put latest values into avaraging struct, delete old one.
 	posA.push_back(position);
 	if(posA.size()>ASIZE)
 	  posA.erase(posA.begin());
-
+	
 	//resetting avarage struct
 	nullifyStruct(positionAV);
-	    
+	
 	for(it = posA.begin(); it != posA.end(); it++){
 	  //std::cout<< i << ": x = " << (*it).x << std::endl;
 	  positionAV.x+=(*it).x;
-	  positionAV.y+=(*it).y;
 	  positionAV.z+=(*it).z;
 	  positionAV.angle+=(*it).angle;
+	  positionAV.angle2+=(*it).angle2;
 	  positionAV.dist+=(*it).dist;
 	  positionAV.OffSetx+=(*it).OffSetx;
-	  positionAV.OffSety+=(*it).OffSety;
+	  positionAV.speed+=(*it).speed;
+	  positionAV.turn+=(*it).turn;
 	      
 	}
 	positionAV.x/=posA.size();
-	positionAV.y/=posA.size();
 	positionAV.z/=posA.size();
 	positionAV.angle/=posA.size();
+	positionAV.angle2/=posA.size();
 	positionAV.dist/=posA.size();
 	positionAV.OffSetx/=posA.size();
-	positionAV.OffSety/=posA.size();
+	positionAV.speed/=posA.size();
+	positionAV.turn/=posA.size();
 
-	servoArgs.angle = positionAV.angle;
-
-	if (qdebug > 0){
-	  printf("x= %f y= %f z= %f angle= %f Offset= %f\n",position.x,position.y,position.z,position.angle,position.OffSetx);
-	}
-	calcTarget();
-	double qtest;
-	double wtest;
+	//calcTarget();
 	if(qdebug > 4){
 	  std::cout << "" << std::endl;
 	  std::cout << "/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*" << std::endl;
@@ -539,15 +636,9 @@ int main(int argc, const char* argv[])
 	//if (qdebug == -1) 
 	if(qdebug>1) std::cout << "failed nt = " << nt << std::endl;
 	nullifyStruct(positionAV);
-	positionAV.x=-1;
-	positionAV.z=0;
-	if (qdebug > 0){
-	  printf("x= %f y= %f z= %f angle= %f Offset= %f\n",position.x,position.y,position.z,position.angle,position.OffSetx);
-	}
-	missFR++;
-
-
-	    
+	positionAV.x=0;
+	positionAV.z=-1;
+	missFR++;    
       }
       if(SHOWO)
 	imshow("Original", img);
@@ -555,17 +646,11 @@ int main(int argc, const char* argv[])
 	imshow("Thresholded", thresholded);
       if(SHOWH)
 	imshow("HSV" , HSV);
-      if (qdebug > 0){
-	if(DOPRINT){
-      printf("Current: X:%.2f, Y:%.2f, Z:%.2f, ang:%.2f, dist:%.2f, OffX:%.2f, OffY:%.2f\n",position.x, position.y, position.z, position.angle, position.dist, position.OffSetx, position.OffSety);
-      printf("Avarage: X:%.2f, Y:%.2f, Z:%.2f, ang:%.2f, dist:%.2f, OffX:%.2f, OffY:%.2f\n",positionAV.x, positionAV.y, positionAV.z, positionAV.angle, positionAV.dist, positionAV.OffSetx, positionAV.OffSety);
-	printf("------------------------------------------------------------\n");
-        
-	if(position.x>10 || position.x<-10)
-	  printf("dist: %f alpha: %f\n",dist,alpha);
+      if(DOPRINT){
+	printf("x=%.2f, z=%.2f, dist=%.2f, angle=%.2f, angle2=%.2f, OffSetx=%.2f, speed=%.2f, turn=%.2f\n",position.x,position.z,position.dist,position.angle,position.angle2,position.OffSetx,position.speed,position.turn);
+	//int angle = servo->readAngle();
+	//printf("angle read: %d\n",angle);
       }
-      
-    }
       pthread_mutex_unlock(&targetMutex);
       totalfound.clear();
       counter++;
@@ -577,15 +662,13 @@ int main(int argc, const char* argv[])
       gettimeofday(&t2,NULL);
       double dt = t2.tv_usec-t1.tv_usec+1000000 * (t2.tv_sec - t1.tv_sec);
       t1=t2;
-      if(qdebug > 3){
-	printf("------ Frame rate: %f fr/s (%f) \n",10./dt*1e6,counter2/dt*1e6); counter2=0;//#FIX
-	printf("------ Miss Frame: %d fr/s \n",missFR);
-      }
+      //if(qdebug > 3){
+      printf("------ Frame rate: %f fr/s (%f) \n",10./dt*1e6,counter2/dt*1e6); counter2=0;
+      printf("------ Miss Frame: %d fr/s \n",missFR);
+      //}
       missFR=0;
       if(USESERVER && remoteSocket>0){
 	int bytes = 0;
-	  
-
 	if(USECOLOR && remoteSocket>0){
 	  int imgSize = img.total() * img.elemSize();
 	  if (!img.isContinuous()) {
@@ -608,7 +691,7 @@ int main(int argc, const char* argv[])
       } // server
 	
     } ///-- counter 10
-    waitKey(5);
+    //waitKey(5);
 
     newFrame = false;
     usleep(10000);

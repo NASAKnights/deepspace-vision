@@ -64,7 +64,7 @@ public:
     int ret;
     int nb = read(ttyFid,&ch,1);
     if(nb != 1){
-      //printf("read bus : no data nb=%d\n",nb);      
+      printf("read bus : no data nb=%d\n",nb);      
       ret=nb;
     }else{
       printf("readBus: ch=(0x%02x) \n",ch);
@@ -134,10 +134,8 @@ public:
 
 
     // clear input buffer
-    printf("clear bus...\n");
     int ch;
     while ((ch=_bus->readBus()) >= 0) printf("read ch = 0x%02x\n",ch);
-    printf("clear bus done.\n");
 
     if (_debug) {
       printf("SND: ");
@@ -182,10 +180,11 @@ public:
     uint8_t sum = 0;
     if (_debug) printf("RCV: (tout=%d) ",tout);
     int len = 7; // minimum length
+    if (cmd==28) len=5;
     while (got < len && millis()-t0 < tout) {
       int ch = _bus->readBus();
       if ( ch >= 0) {
-	if (_debug) printf(" 0x%02x", ch);
+	if (_debug) printf(" 0x%02x ", ch);
 	switch (got) {
 	case 0:
 	case 1:
@@ -293,13 +292,22 @@ public:
       angle=90;
     if(angle<-90)
       angle=-90;
-    angle = angle/90. * 350;
+    angle = angle/240. * 1000;
     angle += 350;
     uint16_t angleSend = angle;
-    uint8_t params[] = { (uint8_t)angleSend, (uint8_t)(angleSend>>8), 500&0xff, 500>>8 };
+    uint8_t params[] = { (uint8_t)angleSend, (uint8_t)(angleSend>>8), 50&0xff, 50>>8 };
     
     bool ok = writeLX(1, params, sizeof(params));
-    printf("Move to %d -> %s\n", angleSend, ok?"OK":"ERR");
+    //printf("Move to %d -> %s\n", angleSend, ok?"OK":"ERR");
+  }
+
+  int readAngle(){
+    int16_t angleRead;
+    bool test = pos_read(angleRead);
+    double angle = angleRead/24 - 350;
+    angle = angle * 240. / 1000.;
+    printf("\nrrread : %f , %d , %i\n",angle,angleRead,test);
+    return (int)angle;
   }
  
   //private: 
