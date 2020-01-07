@@ -17,7 +17,7 @@
 int sig_int, sig_hup, sig_alarm, sig_pipe;   
 
 using namespace std;
- 
+extern int buttonPress;
 double data[20];
 int debug=0;
 int rem_port,sock_main;
@@ -80,6 +80,9 @@ int func(int sockfd, Position *pos)
       if (debug>3) printf(" end while : len=%d  lflg=%d \n",lenbuf,lflg);
       
     } //-- read line --
+    if(atoi(buff) != -1)
+      buttonPress = atoi(buff);
+    
     /*
       int irnd = rand()%1000; bzero(mesg, MAXLINE);
       sprintf(mesg,"dist %f\n",irnd/3.33);
@@ -89,7 +92,7 @@ int func(int sockfd, Position *pos)
     if (debug > 0)
       printf("From client: len=%d %s\t To client : size=%d string:%s \n", il,line,strlen(mesg),mesg); 
     //printf("BP4");
-    sprintf(&mesg[strlen(mesg)],"%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,",pos->x, pos->z, pos->dist, pos->angle, pos->angle2, pos->OffSetx, pos->speed, pos->turn);
+    sprintf(&mesg[strlen(mesg)],"%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,",pos->x, pos->z, pos->dist, pos->angle, pos->angle2, pos->OffSetx, pos->speed, pos->turn, pos->gyro);
     if(strlen(mesg)>MLEN){
       printf("..........error........\n");
       exit(1);

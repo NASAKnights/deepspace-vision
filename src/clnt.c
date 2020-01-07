@@ -1,13 +1,9 @@
 //gcc clnt.c -o clnt.exe
-       #include <sys/socket.h>
-       #include <netinet/in.h>
-       #include <arpa/inet.h>
-
- #include <unistd.h>
-
- #include <time.h>
-
-// Write CPP code here 
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <time.h>
 #include <netdb.h> 
 #include <stdio.h> 
 #include <stdlib.h> 

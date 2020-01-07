@@ -12,26 +12,6 @@
 #include <stdint.h>
 
 #define WAITTIME 90 
-
-// g++ -Wall MotorController.cpp -o MotorControl.exe
-
-// gcc rs_port_read.c -o rs_port_read.exe
-
-// linux:
-// ------
-// stty -F /dev/ttyS0 19200 ; set speed
-// stty -F /dev/ttyS0       ; check speed
-// screen  /dev/ttyS0 19200
-
-
-
-
-
-
-//unsigned long millis();
-//uint32_t ttime(uint8_t);
-
-
 class LX16ABus {
 public:
   LX16ABus(){
@@ -84,13 +64,9 @@ public:
       }
     */
   }
-  
-  
   uint32_t ttime(uint8_t n) {
     return n*10*1000/_baud; // 10 bits per char
   }
-  
-
   int _baud;
   int ttyFid;
 };

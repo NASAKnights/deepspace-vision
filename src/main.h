@@ -19,8 +19,7 @@
 #include <net/if.h>
 #include <sys/time.h>
 #include <pigpio.h>
-typedef struct
-{
+typedef struct {
   double x;
   double z;
   double dist;
@@ -29,6 +28,7 @@ typedef struct
   double OffSetx;
   double speed;
   double turn;
+  double gyro;
 }Position;
 
 
@@ -68,6 +68,7 @@ public:
       points[i].y=0;
     }
   }
+  /*
   void Show(){
     int W = width;
     int H = height;
@@ -78,12 +79,6 @@ public:
     } else {
       std::cout << "" << std::endl;
     }
-    /*
-    if (RatioShow) std::cout << "--Ratio: " << ratio << std::endl;
-    if (SideShow) std::cout << "--Width: " << W << " || Height: " << H << std::endl;
-    if (AngleShow) std::cout << "--Angle: " << angle << std::endl;
-    if (AreaShow) std::cout << "--Area: " << height*width << std::endl;
-    */
-    
   }
+  */
 };

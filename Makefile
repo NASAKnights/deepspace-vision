@@ -42,7 +42,7 @@ vpath           %.cpp $(SRCDIR)
 .cpp.o:
 	$(CC) $(CFLAGS)  ${INCS} -c $<  
 
-MAIN_OBJ = main.o tcp_thread.o opencvPnP.o server.o videoserver.o
+MAIN_OBJ = main.o tcp_thread.o opencvPnP.o server.o videoserver.o pid.o
 main:   ${MAIN_OBJ} src/servoController.h
 	${CC} ${CFLAGS} ${INCS} -o $@.exe ${MAIN_OBJ}  ${LIBS}
 	@echo "export LD_LIBRARY_PATH=$(PLIBS)" > env.sh
