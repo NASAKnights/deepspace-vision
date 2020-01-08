@@ -403,7 +403,8 @@ int main(int argc, const char* argv[]){
   switches.USESERVER = false;
   switches.USECOLOR = false;
   switches.DOPRINT = false;
-  if(argc>1){
+  double Pc,Ic,Dc = 0;
+  if(argc==2){
     std::string args = argv[1];
     std::vector<std::string> token;
     if(args.compare("--help")==0){
@@ -439,6 +440,12 @@ int main(int argc, const char* argv[]){
 	switches.SERVO = true;
     }//#FIX
   }
+  else if(argc>2){
+    Pc = atof(argv[1]);
+    Ic = atof(argv[2]);
+    Dc = atof(argv[3]);
+  }
+    
   Mat img, HSV, thresholded, output;
   PID* drivePID;
   LX16ABus * bus = new LX16ABus();
@@ -479,8 +486,8 @@ int main(int argc, const char* argv[]){
     if (rc != 0)
       printf("video thread fail%d\n",rc);
   }
-
-  drivePID = new PID(0.1,1,-1, .01, 0, 0.001);  // -- init PID
+  
+  drivePID = new PID(0.1,1,-1, Pc, Ic, Dc);  // -- init PID P=0.015
   
   if(switches.SHOWTRACK) createTrackbars();
   if(!img.isContinuous()) img = img.clone();
@@ -540,7 +547,7 @@ int main(int argc, const char* argv[]){
 	if(fixedAngle == 0 && angleGyro != 0 && buttonPress == 1){
 	  fixedAngle = position.angle+angleGyro;
 	}
-	fixedAngle = positionAV.angle+angleGyro;
+	fixedAngle = positionAV.angle+(-angleGyro);
 
 	
 	gettimeofday(&tnew,NULL);
@@ -556,7 +563,7 @@ int main(int argc, const char* argv[]){
 	told = tnew;
 	
 	if(position.OffSetx < 200 && position.OffSetx > -200)
-	  if(position.dist>75)
+	  if(position.dist>65)
 	    positionAV.speed=0.25;
 	/*
 	if(-angleGyro>fixedAngle)
@@ -573,7 +580,8 @@ int main(int argc, const char* argv[]){
       }else{
 	nullifyStruct(positionAV);
 	positionAV.z=-1;
-	missFR++;    
+	missFR++;
+	positionAV.turn=0.3;
       }
       if(switches.SHOWORIG)
 	imshow("Original", img);
