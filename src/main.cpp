@@ -440,11 +440,13 @@ int main(int argc, const char* argv[]){
 	switches.SERVO = true;
     }//#FIX
   }
-  else if(argc>2){
+  /*
+  else if(argc==4){
     Pc = atof(argv[1]);
     Ic = atof(argv[2]);
     Dc = atof(argv[3]);
   }
+  */
     
   Mat img, HSV, thresholded, output;
   PID* drivePID;
@@ -487,7 +489,8 @@ int main(int argc, const char* argv[]){
       printf("video thread fail%d\n",rc);
   }
   
-  drivePID = new PID(0.1,1,-1, Pc, Ic, Dc);  // -- init PID P=0.015
+  //drivePID = new PID(0.1,1,-1, Pc, Ic, Dc);  // -- init PID P=0.015
+  drivePID = new PID(0.0,1,-1, 0.015,0,0);
   
   if(switches.SHOWTRACK) createTrackbars();
   if(!img.isContinuous()) img = img.clone();
