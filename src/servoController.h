@@ -44,10 +44,10 @@ public:
     int ret;
     int nb = read(ttyFid,&ch,1);
     if(nb != 1){
-      printf("read bus : no data nb=%d\n",nb);      
+      //printf("read bus : no data nb=%d\n",nb);      
       ret=nb;
     }else{
-      printf("readBus: ch=(0x%02x) \n",ch);
+      //printf("readBus: ch=(0x%02x) \n",ch);
       ret=ch;
     }
     //printf("ret=0x%02x\n",ret);
@@ -77,7 +77,7 @@ public:
   LX16AServo(LX16ABus * port, int id){
     _bus=port;
     _id=id;
-    _debug=true;
+    _debug=false;
   }
 
   unsigned long micros(){
@@ -111,7 +111,7 @@ public:
 
     // clear input buffer
     int ch;
-    while ((ch=_bus->readBus()) >= 0) printf("read ch = 0x%02x\n",ch);
+    while ((ch=_bus->readBus()) >= 0)  printf("read ch = 0x%02x\n",ch);
 
     if (_debug) {
       printf("SND: ");
@@ -133,9 +133,9 @@ public:
 	if (_debug) printf(" 0x%02x", ch);
 	if (ch != buf[got]) ok = false;
 	got++;
-	printf(" dt=%ld ",millis() -t0);
+	if(_debug) printf(" dt=%ld ",millis() -t0);
       } else 
-	printf(".");
+	if(_debug) printf(".");
     }
     if (_debug) { if (ok) printf(" OK\n"); else printf(" ERR\n"); }
     return ok;

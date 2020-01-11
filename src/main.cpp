@@ -11,6 +11,8 @@ using namespace cv;
   check and maybe shorten / remove tcp_thread.*, tcplib.*, videoserver.cpp, and server.cpp
 */
 
+
+
 #define MAXTARGETS 20
 #define ASIZE 5
 
@@ -42,7 +44,7 @@ struct Switches {
 int counter = 0, counter2=0, counter_old=0;
 int missFR = 0;
 struct timeval t1, t2;
-struct timeval tnew, told;
+struct timeval timeTest, lostAtTime;
 int qdebug = 0;
 //frame
 bool newFrame = false;
@@ -59,6 +61,8 @@ pthread_t videoServerThread;
 void* videoServer(void* arg);
 pthread_t i2cSlaveThread;
 void* i2cSlave(void* arg);
+pthread_t PIDThread;
+void* movePID(void* arg);
 pthread_mutex_t frameMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t targetMutex = PTHREAD_MUTEX_INITIALIZER;
 Mat frame;
@@ -86,6 +90,13 @@ struct ServoArgs{
   LX16AServo* servo;
   int angle;
   int readAngle;
+};
+struct PIDArgs{
+  double turn;
+  double alpha;
+  double servoAngle;
+  double driveAngle;
+  bool move;
 };
 
 
@@ -267,14 +278,42 @@ Mat ThresholdImage(Mat original)
 
 //-Threads-----------------------------------------------------------------------
 
-void *moveServo(void *arg){
+void* moveServo(void *arg){
   while(true){
     ServoArgs* obj = (ServoArgs*) arg;
     obj->servo->setAngle(obj->angle * -1);
-    usleep(250*1000);
+    usleep(50*1000);
   }
 }
-void *VideoCap(void *args){
+
+void* movePID(void* arg){
+  PIDArgs* args = (PIDArgs*) arg;
+  PID* drivePID;
+  struct timeval tnew, told;
+  double turn, dt;
+  //drivePID = new PID(0.1,1,-1, Pc, Ic, Dc);  // -- init PID P=0.015
+  drivePID = new PID(0.0,1,-1, 0.015,0,0);
+  while(true){
+    gettimeofday(&tnew,NULL);
+    dt = (tnew.tv_usec-told.tv_usec+1000000 * (tnew.tv_sec - told.tv_sec))*1e-6;
+    if(told.tv_sec==0)
+      dt = 0.1;
+    turn = drivePID->calculate(args->driveAngle,-angleGyro,dt);
+    //printf(", PnP:%.2f\n",args->alpha);
+    args->turn = turn;
+    /*
+    if(buttonPress == 1 && args->move){
+      args->turn = turn;
+    } else
+      args->turn = 0;
+    */
+    told = tnew;
+    printf("PID: turn: %.2f, driveAngle: %.2f, gyro: %.2f, dt: %f button: %d\n",turn, args->driveAngle, -angleGyro,dt,buttonPress);
+    usleep(10*1000);
+  }
+}
+
+void* VideoCap(void *args){
   cv::VideoCapture vcap;
   
   while (!vcap.open(0)){
@@ -394,6 +433,8 @@ void* i2cSlave(void* arg){
 #endif
 
 int main(int argc, const char* argv[]){
+  int firstLoss = 10;
+  double deltaGyro, prevGyro = 0;
   Switches switches;
   switches.SERVO = false;
   switches.SHOWORIG = false;
@@ -449,21 +490,27 @@ int main(int argc, const char* argv[]){
   */
     
   Mat img, HSV, thresholded, output;
-  PID* drivePID;
   LX16ABus * bus = new LX16ABus();
+  bool switchBool = true;
   angleGyro = 0;
   fixedAngle = 0;
-  bus->openBus("/dev/ttyUSB0");
+  bus->openBus("/dev/ttyUSB1");
   LX16AServo * servo = new LX16AServo(bus,1);
+  PIDArgs PIDargs;
+  PIDargs.move = false;
+  PIDargs.alpha = 0;
+  PIDargs.servoAngle = 0;
+  PIDargs.driveAngle = 0;
   srand(time(NULL));
+  ServoArgs servoArgs;
   if(switches.SERVO){
-    ServoArgs servoArgs;
     servoArgs.angle = 0;
     servoArgs.servo = servo;
     pthread_create(&moveServoThread,NULL,moveServo, &servoArgs);
     pthread_setname_np(moveServoThread,"MoveServoThread");
   }
   gettimeofday(&t1, NULL);
+  gettimeofday(&timeTest,NULL);
   videoPort=4097;
   Position position, positionAV;
   std::vector<Position>::iterator it;
@@ -472,6 +519,7 @@ int main(int argc, const char* argv[]){
   pthread_create(&tcpserver, NULL, opentcp, &positionAV);
   pthread_create(&MJPEG, NULL, VideoCap, NULL);
   pthread_create(&i2cSlaveThread, NULL, i2cSlave,&angleGyro);
+  pthread_create(&PIDThread, NULL, movePID, &PIDargs);
   int rc = pthread_setname_np(MJPEG, "MJPEG Thread");
   if (rc != 0)
     printf("MJPEG thread fail%d\n",rc);
@@ -489,8 +537,6 @@ int main(int argc, const char* argv[]){
       printf("video thread fail%d\n",rc);
   }
   
-  //drivePID = new PID(0.1,1,-1, Pc, Ic, Dc);  // -- init PID P=0.015
-  drivePID = new PID(0.0,1,-1, 0.015,0,0);
   
   if(switches.SHOWTRACK) createTrackbars();
   if(!img.isContinuous()) img = img.clone();
@@ -547,23 +593,31 @@ int main(int argc, const char* argv[]){
 
 	if(angleGyro != 0 && buttonPress == 0)
 	  printf("gyroset\n");
-	if(fixedAngle == 0 && angleGyro != 0 && buttonPress == 1){
-	  fixedAngle = position.angle+angleGyro;
-	}
-	fixedAngle = positionAV.angle+(-angleGyro);
-
 	
-	gettimeofday(&tnew,NULL);
-	double dt = (tnew.tv_usec-told.tv_usec+1000000 * (tnew.tv_sec - told.tv_sec))*1e-6;
-	if(told.tv_sec==0)
-	  dt = 0.1;
+	deltaGyro = angleGyro - prevGyro;
+	std::cout << "gyro: " << angleGyro << " , " <<deltaGyro << std::endl;
+	//servoArgs.angle += deltaGyro;
+	fixedAngle = positionAV.angle+(-angleGyro)+servoArgs.angle;
+	prevGyro = angleGyro;
 
+	printf("fixed = %.2f, alpha = %.2f, gyro = %.2f, servo = %d\n"
+	       ,fixedAngle,positionAV.angle,angleGyro, servoArgs.angle);
+        
+	PIDargs.alpha = positionAV.angle;
+	PIDargs.servoAngle = servoArgs.angle;
+
+	if(PIDargs.move == false)
+	  PIDargs.driveAngle = fixedAngle;
 	
-	if(fixedAngle != 0 && buttonPress == 1){
-	  positionAV.turn = drivePID->calculate(fixedAngle,-position.gyro,dt);
-	  printf(", PnP:%.2f\n",positionAV.angle);
+	positionAV.turn = PIDargs.turn;
+	printf("PIDTurn: %f\n",PIDargs.turn);
+	if(buttonPress == 1){
+	  servoArgs.angle = 0;
+	  printf("reset \n");
+	  PIDargs.move = true;
 	}
-	told = tnew;
+
+	//pid was here
 	
 	if(position.OffSetx < 200 && position.OffSetx > -200)
 	  if(position.dist>65)
@@ -574,17 +628,42 @@ int main(int argc, const char* argv[]){
 	else if(-angleGyro<fixedAngle)
 	  position.turn = 0.20;
 	*/
+
+	if(PIDargs.move && switchBool){
+	  for(int i=0;i<10;i++){
+	    positionAV.turn = PIDargs.turn;
+	    usleep(100*1000);
+	  }
+	  switchBool = false;
+	}
 	
+	
+	else if(PIDargs.move)
+	  PIDargs.driveAngle = fixedAngle;
 	
 	if(qdebug > 4){
 	  std::cout << "" << std::endl;
 	  std::cout << "/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*" << std::endl;
 	}
+	firstLoss = -1;
       }else{
+	if(firstLoss > 5){
+	  servoArgs.angle=-90;
+	  gettimeofday(&lostAtTime,NULL);
+	  firstLoss = 0;
+	}
 	nullifyStruct(positionAV);
 	positionAV.z=-1;
 	missFR++;
-	positionAV.turn=0.3;
+	gettimeofday(&timeTest,NULL);
+	double dt = (timeTest.tv_usec-lostAtTime.tv_usec+1000000 * (timeTest.tv_sec - lostAtTime.tv_sec))*1e-6;
+	if(dt > .5){
+	  if(servoArgs.angle<=90 && firstLoss!=-1){
+	    servoArgs.angle += 30;
+	    printf("servo incrment Angle: %.2f\n",servoArgs.angle);
+	  }
+	  gettimeofday(&lostAtTime,NULL);
+	}
       }
       if(switches.SHOWORIG)
 	imshow("Original", img);
