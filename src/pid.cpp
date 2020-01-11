@@ -40,7 +40,7 @@ double PID::calculate( double setpoint, double pv ,double dt)
   // Calculate total output
   double output = Pout + Iout + Dout;
 
-  printf("fix-gyro:%6.2f, %6.2f, errorPID: %6.2f, Pout: %6.2f, Iout: %6.2f, Dout:%6.2f, output: %6.2f",setpoint,pv,error,Pout,Iout,Dout,output);
+  //printf("fix-gyro:%6.2f, %6.2f, errorPID: %6.2f, Pout: %6.2f, Iout: %6.2f, Dout:%6.2f, output: %6.2f\n",setpoint,pv,error,Pout,Iout,Dout,output);
   // Restrict to max/min
   if( output > _max )
     output = _max;

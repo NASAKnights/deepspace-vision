@@ -26,7 +26,7 @@ int MaxDiff = 1000;
 int minH = 0;
 int maxH = 255;
 int minS = 0;
-int maxS = 255;
+int maxS = 5; // 255 without filter
 int minV = 219;
 int maxV = 241;
 //booleans
@@ -245,6 +245,7 @@ int findTarget(Mat original, Mat thresholded, Targets *targets)
 	if (arr>1) arr=1./arr;
 	if (qdebug > 3)std::cout << " area " << targets[i].area << " " << targets[k].area << " arr= " << arr << std::endl;
 	if (arr<0.5) {if (qdebug>2) printf("failed area ratio: %f: %d\n",arr,ttt);continue;}
+	if (abs(dx)<targets[i].height/2.0 || abs(dx) > targets[i].height*2.0){continue;}
 	//------  end selection -------
 
 	if (targets[i].status==1) { targets[i].status=2; targets[i].found = "yes"; ntargets++ ; }
@@ -292,7 +293,7 @@ void* movePID(void* arg){
   struct timeval tnew, told;
   double turn, dt;
   //drivePID = new PID(0.1,1,-1, Pc, Ic, Dc);  // -- init PID P=0.015
-  drivePID = new PID(0.0,1,-1, 0.015,0,0);
+  drivePID = new PID(0.0,1,-1, 0.009,0,0.004); // 0.015 // 0 // 0
   while(true){
     gettimeofday(&tnew,NULL);
     dt = (tnew.tv_usec-told.tv_usec+1000000 * (tnew.tv_sec - told.tv_sec))*1e-6;
@@ -308,7 +309,7 @@ void* movePID(void* arg){
       args->turn = 0;
     */
     told = tnew;
-    printf("PID: turn: %.2f, driveAngle: %.2f, gyro: %.2f, dt: %f button: %d\n",turn, args->driveAngle, -angleGyro,dt,buttonPress);
+    //printf("PID: turn: %.2f, driveAngle: %.2f, gyro: %.2f, dt: %f button: %d\n",turn, args->driveAngle, -angleGyro,dt,buttonPress);
     usleep(10*1000);
   }
 }
@@ -433,7 +434,8 @@ void* i2cSlave(void* arg){
 #endif
 
 int main(int argc, const char* argv[]){
-  int firstLoss = 10;
+  int frFound = 0;
+  int frLost = 0;
   double deltaGyro, prevGyro = 0;
   Switches switches;
   switches.SERVO = false;
@@ -488,10 +490,12 @@ int main(int argc, const char* argv[]){
     Dc = atof(argv[3]);
   }
   */
+  printf("tr : %d\n",switches.SHOWTRACK);
     
   Mat img, HSV, thresholded, output;
   LX16ABus * bus = new LX16ABus();
   bool switchBool = true;
+  bool resetCam = true;
   angleGyro = 0;
   fixedAngle = 0;
   bus->openBus("/dev/ttyUSB1");
@@ -558,7 +562,7 @@ int main(int argc, const char* argv[]){
 	findAnglePnP(img,tLeft,tRight,&position);
       if (nt==2) {
 	position.gyro=angleGyro;
-	printf("angleGyro: %f, fixed: %f, PnP: %f\n",position.gyro,fixedAngle,position.angle);
+	//printf("angleGyro: %f, fixed: %f, PnP: %f\n",position.gyro,fixedAngle,position.angle);
 	//put latest values into avaraging struct, delete old one.
 	posA.push_back(position);
 	if(posA.size()>ASIZE)
@@ -589,19 +593,15 @@ int main(int argc, const char* argv[]){
 
 
 	//====  PID =====
-
-
-	if(angleGyro != 0 && buttonPress == 0)
-	  printf("gyroset\n");
 	
 	deltaGyro = angleGyro - prevGyro;
-	std::cout << "gyro: " << angleGyro << " , " <<deltaGyro << std::endl;
+	//std::cout << "gyro: " << angleGyro << " , " <<deltaGyro << std::endl;
 	//servoArgs.angle += deltaGyro;
-	fixedAngle = positionAV.angle+(-angleGyro)+servoArgs.angle;
+	fixedAngle = positionAV.angle+(-angleGyro)+servoArgs.angle;//+(-positionAV.angle2/3.0);
 	prevGyro = angleGyro;
 
-	printf("fixed = %.2f, alpha = %.2f, gyro = %.2f, servo = %d\n"
-	       ,fixedAngle,positionAV.angle,angleGyro, servoArgs.angle);
+	//printf("fixed = %.2f, alpha = %.2f, gyro = %.2f, servo = %d\n"
+	//,fixedAngle,positionAV.angle,angleGyro, servoArgs.angle);
         
 	PIDargs.alpha = positionAV.angle;
 	PIDargs.servoAngle = servoArgs.angle;
@@ -610,7 +610,7 @@ int main(int argc, const char* argv[]){
 	  PIDargs.driveAngle = fixedAngle;
 	
 	positionAV.turn = PIDargs.turn;
-	printf("PIDTurn: %f\n",PIDargs.turn);
+	//printf("PIDTurn: %f\n",PIDargs.turn);
 	if(buttonPress == 1){
 	  servoArgs.angle = 0;
 	  printf("reset \n");
@@ -645,23 +645,43 @@ int main(int argc, const char* argv[]){
 	  std::cout << "" << std::endl;
 	  std::cout << "/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*" << std::endl;
 	}
-	firstLoss = -1;
+	frFound++;
+	if(frFound >= 5){
+	  frLost = 0;
+	  frFound = 6;
+	  resetCam = false;
+	}
+	printf("found: frFound: %d, frLost:%d\n",frFound, frLost);
       }else{
-	if(firstLoss > 5){
+	if(resetCam){
+	  resetCam = false;
 	  servoArgs.angle=-90;
 	  gettimeofday(&lostAtTime,NULL);
-	  firstLoss = 0;
+	}
+	if(frLost >= 15 && frFound >= 5){
+	  resetCam = true;
+	  frFound = 0;
+	  frLost = 0;
+	}
+	if(frLost >= 20){
+	  frFound = 0;
+	  frLost = 21;
 	}
 	nullifyStruct(positionAV);
 	positionAV.z=-1;
+	frLost++;
 	missFR++;
 	gettimeofday(&timeTest,NULL);
 	double dt = (timeTest.tv_usec-lostAtTime.tv_usec+1000000 * (timeTest.tv_sec - lostAtTime.tv_sec))*1e-6;
+	printf("lost: frFound: %d, frLost:%d\n",frFound, frLost);
 	if(dt > .5){
-	  if(servoArgs.angle<=90 && firstLoss!=-1){
-	    servoArgs.angle += 30;
-	    printf("servo incrment Angle: %.2f\n",servoArgs.angle);
-	  }
+	  if(servoArgs.angle<60){
+	    if(frFound < 5 && frLost > 3){
+	      servoArgs.angle += 30;
+	      printf("servo incrment Angle: %.2f\n",servoArgs.angle);
+	    }
+	  } else
+	    resetCam = true;
 	  gettimeofday(&lostAtTime,NULL);
 	}
       }
@@ -710,7 +730,7 @@ int main(int argc, const char* argv[]){
 	}
       }
     }
-    //waitKey(5);
+    waitKey(5);
 
     newFrame = false;
     usleep(10000);
