@@ -45,6 +45,7 @@ int counter = 0, counter2=0, counter_old=0;
 int missFR = 0;
 struct timeval t1, t2;
 struct timeval timeTest, lostAtTime;
+struct timeval timenow, timestart;
 int qdebug = 0;
 //frame
 bool newFrame = false;
@@ -345,64 +346,6 @@ inline void nullifyStruct(Position &pos){
   pos.turn=0;
   pos.gyro=0;
 }
-//#define USE_I2C
-#ifdef USE_I2C
-int getControlBits(int address /* max 127 */, bool open) {
-  int flags;
-  if(open)
-    flags = /*RE:*/ (1 << 9) | /*TE:*/ (1 << 8) | /*I2:*/ (1 << 2) | /*EN:*/ (1 << 0);
-  else // Close/Abort
-    flags = /*BK:*/ (1 << 7) | /*I2:*/ (0 << 2) | /*EN:*/ (0 << 0);
-
-  return (address << 16 /*= to the start of significant bits*/) | flags;
-}
-
-void *i2cSlave(void *arg){
-  float *angleGyro = (float*) arg;
-  const int slaveAddress = 0x04;
-  bsc_xfer_t xfer;
-  printf("gpioInit: %d\n",gpioInitialise());
-  usleep(1000*1000);
-  std::cout << "Initialized GPIOs\n";
-  // Close old device (if any)
-  xfer.control = getControlBits(slaveAddress, false); // To avoid conflicts when restarting
-  printf("after getBits\n");
-  bscXfer(&xfer);
-  printf("after bsc\n");
-  xfer.control = getControlBits(slaveAddress, true);
-  printf("after getContBits\n");
-  int status = bscXfer(&xfer); // Should now be visible in I2C-Scanners
-  printf("after bscXger\n");
-  //std::string data = NULL;
-  if (status >= 0)
-    {
-      std::cout << "Opened slave\n";
-      xfer.rxCnt = 0;
-      printf("before loop\n");
-      int counter_i2c = 0;
-      while(1){
-	counter_i2c++;
-	if(counter_i2c % 1000000 == 0){
-	  printf("in loop1 %d\n",counter_i2c);
-	}
-	bscXfer(&xfer);
-	if(xfer.rxCnt > 0) {
-	  unsigned char cmd[64];
-	  std::cout << "Received " << xfer.rxCnt << " bytes: ";// << (char*)xfer.rxBuf;
-	  float roll, pitch, yaw;
-	  sscanf(xfer.rxBuf,"%f,%f,%f",&roll,&pitch,&yaw);
-	  printf("%f,%f,%f\n",roll/100.,pitch/100.,yaw/100.);
-	  *angleGyro=yaw/100.0f;
-	}
-	//if (xfer.rxCnt > 0){
-	//    cout << xfer.rxBuf;
-	//}
-      }
-    }else
-    std::cout << "Failed to open slave!!!\n";
-  printf("thread gone\n");
-}
-#else
 void* i2cSlave(void* arg){
   float *angleGyro = (float*) arg;
   printf("enter gyro slave\n");
@@ -431,7 +374,6 @@ void* i2cSlave(void* arg){
     *angleGyro=yaw/100.0f;
   }
 }
-#endif
 
 int main(int argc, const char* argv[]){
   int frFound = 0;

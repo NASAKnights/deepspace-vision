@@ -271,9 +271,15 @@ public:
     angle = angle/240. * 1000;
     angle += 350;
     uint16_t angleSend = angle;
-    uint8_t params[] = { (uint8_t)angleSend, (uint8_t)(angleSend>>8), 50&0xff, 50>>8 };
+    uint16_t timeSpeed = 50;
+    uint8_t params[] = { (uint8_t)angleSend, (uint8_t)(angleSend>>8), timeSpeed&0xff, timeSpeed>8 };
     
     bool ok = writeLX(1, params, sizeof(params));
+
+    timespeed = timeSpeed;
+    lastAngle = angle;
+    gettimeofday(&lastTime,NULL);
+    
     //printf("Move to %d -> %s\n", angleSend, ok?"OK":"ERR");
   }
 
@@ -285,8 +291,24 @@ public:
     printf("\nrrread : %f , %d , %i\n",angle,angleRead,test);
     return (int)angle;
   }
+  int readAngle2(){
+    struct timeval nowTime;
+    gettimeofday(&nowTime,NULL);
+    struct timeval diff = nowTime-lastTime;
+    double dt = (diff.tv_sec*1000.)+(diff.tv_usec/1000.);
+    if(dt >= timespeed)
+      return lastAngle;
+    else if(dt < timespeed){
+      return (lastAngle/timespeed)*dt;
+    }
+    
+  }
  
-  //private: 
+  //private:
+  double lastAngle;
+  uint16_t timespeed;
+  struct timeval lastTime;
+  
   LX16ABus * _bus;
   uint8_t _id;
   bool _debug;
