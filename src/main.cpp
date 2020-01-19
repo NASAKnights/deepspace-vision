@@ -14,7 +14,7 @@ using namespace cv;
 
 
 #define MAXTARGETS 20
-#define ASIZE 5
+#define ASIZE 10
 
 int buttonPress;
 
@@ -293,7 +293,7 @@ void* movePID(void* arg){
   struct timeval tnew, told;
   double turn, dt;
   //drivePID = new PID(0.1,1,-1, Pc, Ic, Dc);  // -- init PID P=0.015
-  drivePID = new PID(0.0,1,-1, 0.009,0,0.004); // 0.015 // 0 // 0
+  drivePID = new PID(0.0,1,-1, 0.015,0,0.004); // 0.015 // 0 // 0
   while(true){
     gettimeofday(&tnew,NULL);
     dt = (tnew.tv_usec-told.tv_usec+1000000 * (tnew.tv_sec - told.tv_sec))*1e-6;
@@ -309,7 +309,7 @@ void* movePID(void* arg){
       args->turn = 0;
     */
     told = tnew;
-    //printf("PID: turn: %.2f, driveAngle: %.2f, gyro: %.2f, dt: %f button: %d\n",turn, args->driveAngle, -angleGyro,dt,buttonPress);
+    printf("PID: turn: %.2f, driveAngle: %.2f, gyro: %.2f, dt: %f button: %d\n",turn, args->driveAngle, -angleGyro,dt,buttonPress);
     usleep(10*1000);
   }
 }
@@ -597,7 +597,7 @@ int main(int argc, const char* argv[]){
 	deltaGyro = angleGyro - prevGyro;
 	//std::cout << "gyro: " << angleGyro << " , " <<deltaGyro << std::endl;
 	//servoArgs.angle += deltaGyro;
-	fixedAngle = positionAV.angle+(-angleGyro)+servoArgs.angle;//+(-positionAV.angle2/3.0);
+	fixedAngle = positionAV.angle+(-angleGyro);//+servoArgs.angle+(-positionAV.angle2);
 	prevGyro = angleGyro;
 
 	//printf("fixed = %.2f, alpha = %.2f, gyro = %.2f, servo = %d\n"
@@ -612,11 +612,10 @@ int main(int argc, const char* argv[]){
 	positionAV.turn = PIDargs.turn;
 	//printf("PIDTurn: %f\n",PIDargs.turn);
 	if(buttonPress == 1){
-	  servoArgs.angle = 0;
+	  servoArgs.angle = positionAV.angle+positionAV.angle2;
 	  printf("reset \n");
 	  PIDargs.move = true;
 	}
-
 	//pid was here
 	
 	if(position.OffSetx < 200 && position.OffSetx > -200)
@@ -636,8 +635,6 @@ int main(int argc, const char* argv[]){
 	  }
 	  switchBool = false;
 	}
-	
-	
 	else if(PIDargs.move)
 	  PIDargs.driveAngle = fixedAngle;
 	
@@ -730,7 +727,7 @@ int main(int argc, const char* argv[]){
 	}
       }
     }
-    waitKey(5);
+    //waitKey(5);
 
     newFrame = false;
     usleep(10000);
