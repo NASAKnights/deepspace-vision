@@ -29,8 +29,21 @@ typedef struct {
   double speed;
   double turn;
   double gyro;
+  double P;
+  double I;
+  double D;
 }Position;
 
+struct PIDArgs{
+  double turn;
+  double alpha;
+  double servoAngle;
+  double driveAngle;
+  double P;
+  double I;
+  double D;
+  bool move;
+};
 
 class Targets{
 public:

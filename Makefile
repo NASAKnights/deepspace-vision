@@ -47,6 +47,8 @@ main:   ${MAIN_OBJ} src/servoController.h
 	${CC} ${CFLAGS} ${INCS} -o $@.exe ${MAIN_OBJ}  ${LIBS}
 	@echo "export LD_LIBRARY_PATH=$(PLIBS)" > env.sh
 	@echo "stty -F /dev/ttyUSB0 115200" >> env.sh
+	@echo "stty -F /dev/ttyUSB0 -hupcl" >> env.sh
+	@echo "stty -F /dev/ttyUSB1 115200" >> env.sh
 
 clnt:   clnt.o
 	${CC} ${CFLAGS} -o $@.exe clnt.o 

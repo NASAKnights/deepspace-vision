@@ -1,4 +1,4 @@
-//stty -F /dev/ttyS0 115200
+//stty -F /dev/ttyUSB0 115200
 
 #include <unistd.h>
 #include <stdio.h>
@@ -264,20 +264,25 @@ public:
   }
 
   bool setAngle(int angle){
+    int degreeAngle = angle;
     if(angle>90)
       angle=90;
     if(angle<-90)
       angle=-90;
     angle = angle/240. * 1000;
-    angle += 350;
+    angle += 350;//off set in their system. offset robot 0
+    double speed = 1.0/1.0; //degree per ms
+    double time = abs(lastAngle-degreeAngle)/speed;
+    
     uint16_t angleSend = angle;
-    uint16_t timeSpeed = 50;
+    uint16_t timeSpeed = time;
     uint8_t params[] = { (uint8_t)angleSend, (uint8_t)(angleSend>>8), timeSpeed&0xff, timeSpeed>8 };
     
     bool ok = writeLX(1, params, sizeof(params));
 
     timespeed = timeSpeed;
-    lastAngle = angle;
+    startAngle = lastAngle;
+    lastAngle = degreeAngle;
     gettimeofday(&lastTime,NULL);
     
     //printf("Move to %d -> %s\n", angleSend, ok?"OK":"ERR");
@@ -294,18 +299,21 @@ public:
   int readAngle2(){
     struct timeval nowTime;
     gettimeofday(&nowTime,NULL);
-    struct timeval diff = nowTime-lastTime;
+    struct timeval diff;
+    diff.tv_sec = nowTime.tv_sec-lastTime.tv_sec;
+    diff.tv_usec = nowTime.tv_usec-lastTime.tv_usec;
     double dt = (diff.tv_sec*1000.)+(diff.tv_usec/1000.);
     if(dt >= timespeed)
-      return lastAngle;
+      return 1;//lastAngle;
     else if(dt < timespeed){
-      return (lastAngle/timespeed)*dt;
+      return 2;//((startAngle-lastAngle)/timespeed)*dt-startAngle;
     }
     
   }
  
   //private:
   double lastAngle;
+  double startAngle;
   uint16_t timespeed;
   struct timeval lastTime;
   

@@ -26,7 +26,7 @@ int MaxDiff = 1000;
 int minH = 0;
 int maxH = 255;
 int minS = 0;
-int maxS = 5; // 255 without filter
+int maxS = 255; // 5 without filter
 int minV = 219;
 int maxV = 241;
 //booleans
@@ -39,6 +39,7 @@ struct Switches {
   bool USECOLOR;
   bool DOPRINT;
   bool SERVO;
+  bool TURNCAM;
 };
 //frame counter
 int counter = 0, counter2=0, counter_old=0;
@@ -91,13 +92,6 @@ struct ServoArgs{
   LX16AServo* servo;
   int angle;
   int readAngle;
-};
-struct PIDArgs{
-  double turn;
-  double alpha;
-  double servoAngle;
-  double driveAngle;
-  bool move;
 };
 
 
@@ -294,13 +288,16 @@ void* movePID(void* arg){
   struct timeval tnew, told;
   double turn, dt;
   //drivePID = new PID(0.1,1,-1, Pc, Ic, Dc);  // -- init PID P=0.015
-  drivePID = new PID(0.0,1,-1, 0.015,0,0.004); // 0.015 // 0 // 0
+  drivePID = new PID(0.0,1,-1, 0.01,0.001,0.007); // 0.007 // 0 // 0.008
   while(true){
     gettimeofday(&tnew,NULL);
     dt = (tnew.tv_usec-told.tv_usec+1000000 * (tnew.tv_sec - told.tv_sec))*1e-6;
     if(told.tv_sec==0)
       dt = 0.1;
-    turn = drivePID->calculate(args->driveAngle,-angleGyro,dt);
+    turn = 0;
+    drivePID->button(buttonPress);
+    turn = drivePID->calculate(args->driveAngle,-angleGyro,dt,&args->P,&args->I,&args->D);
+    
     //printf(", PnP:%.2f\n",args->alpha);
     args->turn = turn;
     /*
@@ -310,7 +307,7 @@ void* movePID(void* arg){
       args->turn = 0;
     */
     told = tnew;
-    printf("PID: turn: %.2f, driveAngle: %.2f, gyro: %.2f, dt: %f button: %d\n",turn, args->driveAngle, -angleGyro,dt,buttonPress);
+    //printf("PID: turn: %.2f, driveAngle: %.2f, gyro: %.2f, dt: %f button: %d\n",turn, args->driveAngle, -angleGyro,dt,buttonPress);
     usleep(10*1000);
   }
 }
@@ -322,8 +319,12 @@ void* VideoCap(void *args){
     std::cout << "cant connect" << std::endl;
     usleep(10000000);
   }
+printf("setting brightness\n");
   vcap.set(cv::CAP_PROP_BRIGHTNESS,100);
-  vcap.set(cv::CAP_PROP_AUTO_EXPOSURE, 255);
+printf("setting auto exposure\n");
+  vcap.set(cv::CAP_PROP_AUTO_EXPOSURE, 1);//255
+printf("setting exposure\n");
+  vcap.set(cv::CAP_PROP_EXPOSURE,100);
   FrameWidth = vcap.get(cv::CAP_PROP_FRAME_WIDTH);
   FrameHeight = vcap.get(cv::CAP_PROP_FRAME_HEIGHT);
   while (true){
@@ -345,6 +346,10 @@ inline void nullifyStruct(Position &pos){
   pos.speed=0;
   pos.turn=0;
   pos.gyro=0;
+  pos.P=0;
+  pos.I=0;
+  pos.D=0;
+  
 }
 void* i2cSlave(void* arg){
   float *angleGyro = (float*) arg;
@@ -388,7 +393,7 @@ int main(int argc, const char* argv[]){
   switches.USESERVER = false;
   switches.USECOLOR = false;
   switches.DOPRINT = false;
-  double Pc,Ic,Dc = 0;
+  switches.TURNCAM = false;
   if(argc==2){
     std::string args = argv[1];
     std::vector<std::string> token;
@@ -401,6 +406,7 @@ int main(int argc, const char* argv[]){
       printf("-b black and white\n");
       printf("-p print stuff\n");
       printf("-r use the servo\n");
+      printf("-a turn cam");
       return 0;
     }
     printf("args size: %d\n",args.size());
@@ -423,15 +429,10 @@ int main(int argc, const char* argv[]){
 	switches.DOPRINT = true;
       if(token[i]=="r")
 	switches.SERVO = true;
+      if(token[i]=="a")
+        switches.TURNCAM = true;
     }//#FIX
   }
-  /*
-  else if(argc==4){
-    Pc = atof(argv[1]);
-    Ic = atof(argv[2]);
-    Dc = atof(argv[3]);
-  }
-  */
   printf("tr : %d\n",switches.SHOWTRACK);
     
   Mat img, HSV, thresholded, output;
@@ -500,6 +501,7 @@ int main(int argc, const char* argv[]){
       pthread_mutex_lock(&targetMutex);
       int nt = findTarget(img, thresholded, targets);
       nullifyStruct(position);
+      printf("nt: %d\n",nt);
       if (nt==2)
 	findAnglePnP(img,tLeft,tRight,&position);
       if (nt==2) {
@@ -532,71 +534,78 @@ int main(int argc, const char* argv[]){
 	positionAV.speed=position.speed;
 	positionAV.turn=position.turn;
 	positionAV.gyro=position.gyro;
-
+	positionAV.P=position.P;
+	positionAV.I=position.I;
+	positionAV.D=position.D;
 
 	//====  PID =====
 	
 	deltaGyro = angleGyro - prevGyro;
-	//std::cout << "gyro: " << angleGyro << " , " <<deltaGyro << std::endl;
-	//servoArgs.angle += deltaGyro;
-	fixedAngle = positionAV.angle+(-angleGyro);//+servoArgs.angle+(-positionAV.angle2);
+	std::cout << "gyro: " << angleGyro << " , " <<deltaGyro << std::endl;
+	if (abs(positionAV.angle)>20) 
+	  servoArgs.angle += deltaGyro/10.; //-- move camera to ...
+	//int servoAngle = servo->readAngle2(); // use instead of servoAgrs belo
+	//printf("angle diff: read: %d, angle: %d, pos angle: %.2f\n",servoAngle,servoArgs.angle,positionAV.angle);
+	fixedAngle = positionAV.angle+(-angleGyro)+servoArgs.angle+(-positionAV.angle2); // calculate the needed position for the turn
 	prevGyro = angleGyro;
 
-	//printf("fixed = %.2f, alpha = %.2f, gyro = %.2f, servo = %d\n"
-	//,fixedAngle,positionAV.angle,angleGyro, servoArgs.angle);
-        
+	// set PID args to send to server;
+	positionAV.P=PIDargs.P;
+	positionAV.I=PIDargs.I;
+	positionAV.D=PIDargs.D;
+
+	// send PID the required values;
 	PIDargs.alpha = positionAV.angle;
 	PIDargs.servoAngle = servoArgs.angle;
 
 	if(PIDargs.move == false)
 	  PIDargs.driveAngle = fixedAngle;
-	
 	positionAV.turn = PIDargs.turn;
-	//printf("PIDTurn: %f\n",PIDargs.turn);
 	if(buttonPress == 1){
 	  servoArgs.angle = positionAV.angle+positionAV.angle2;
 	  printf("reset \n");
 	  PIDargs.move = true;
 	}
 	//pid was here
-	
+
+	// set speed to constant (any values above 0.0 works) iff the target is within 200 && -200 bounds, and the distance to target is >65cm
+	//                       (since the robot calculates the speed based on turn by its self)
 	if(position.OffSetx < 200 && position.OffSetx > -200)
 	  if(position.dist>65)
-	    positionAV.speed=0.25;
-	/*
-	if(-angleGyro>fixedAngle)
-	  position.turn = -0.20;
-	else if(-angleGyro<fixedAngle)
-	  position.turn = 0.20;
-	*/
+	    positionAV.speed=0.5;//0.25
 
+	
 	if(PIDargs.move && switchBool){
 	  for(int i=0;i<10;i++){
 	    positionAV.turn = PIDargs.turn;
-	    usleep(100*1000);
+	    //usleep(100*1000);
 	  }
 	  switchBool = false;
-	}
-	else if(PIDargs.move)
+	} else if(PIDargs.move)
 	  PIDargs.driveAngle = fixedAngle;
 	
 	if(qdebug > 4){
 	  std::cout << "" << std::endl;
 	  std::cout << "/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*" << std::endl;
 	}
-	frFound++;
-	if(frFound >= 5){
-	  frLost = 0;
-	  frFound = 6;
-	  resetCam = false;
+	if(switches.TURNCAM){
+	  frFound++;
+	  if(frFound >= 5){
+	    frLost = 0;
+	    frFound = 6;
+	    resetCam = false;
+	  }
 	}
-	printf("found: frFound: %d, frLost:%d\n",frFound, frLost);
+	
+	//printf("found: frFound: %d, frLost:%d\n",frFound, frLost);
       }else{
+	if(switches.TURNCAM){
 	if(resetCam){
 	  resetCam = false;
 	  servoArgs.angle=-90;
 	  gettimeofday(&lostAtTime,NULL);
 	}
+	
 	if(frLost >= 15 && frFound >= 5){
 	  resetCam = true;
 	  frFound = 0;
@@ -606,22 +615,26 @@ int main(int argc, const char* argv[]){
 	  frFound = 0;
 	  frLost = 21;
 	}
+	}
 	nullifyStruct(positionAV);
 	positionAV.z=-1;
+	if(switches.TURNCAM){
 	frLost++;
 	missFR++;
 	gettimeofday(&timeTest,NULL);
 	double dt = (timeTest.tv_usec-lostAtTime.tv_usec+1000000 * (timeTest.tv_sec - lostAtTime.tv_sec))*1e-6;
-	printf("lost: frFound: %d, frLost:%d\n",frFound, frLost);
+	//printf("lost: frFound: %d, frLost:%d\n",frFound, frLost);
 	if(dt > .5){
 	  if(servoArgs.angle<60){
 	    if(frFound < 5 && frLost > 3){
 	      servoArgs.angle += 30;
-	      printf("servo incrment Angle: %.2f\n",servoArgs.angle);
+	      printf("servo incrment Angle: %d\n",servoArgs.angle);
 	    }
-	  } else
-	    resetCam = true;
+	  }
+	  else
+	  resetCam = true;
 	  gettimeofday(&lostAtTime,NULL);
+	}
 	}
       }
       if(switches.SHOWORIG)

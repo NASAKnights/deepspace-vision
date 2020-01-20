@@ -15,11 +15,24 @@ PID::PID( double dt, double max, double min, double Kp, double Ki, double Kd ):
   _Kd(Kd),
   _Ki(Ki),
   _pre_error(0),
-  _integral(0)
+  _integral(0),
+  oldState(0)
 {
 }
 
-double PID::calculate( double setpoint, double pv ,double dt)
+
+void PID::button(int buttonState){
+
+  if(buttonState==1 && oldState == 0){
+    _integral=0;
+    _pre_error=0;
+  }
+  oldState=buttonState;
+}
+
+
+
+double PID::calculate( double setpoint, double pv ,double dt, double* P, double* I, double* D)
 {
   _dt = dt;
     
@@ -39,8 +52,17 @@ double PID::calculate( double setpoint, double pv ,double dt)
 
   // Calculate total output
   double output = Pout + Iout + Dout;
-
-  //printf("fix-gyro:%6.2f, %6.2f, errorPID: %6.2f, Pout: %6.2f, Iout: %6.2f, Dout:%6.2f, output: %6.2f\n",setpoint,pv,error,Pout,Iout,Dout,output);
+  printf("fix-gyro:%6.2f, %6.2f, errorPID: %6.2f, Pout: %6.2f, Iout: %6.2f, Dout:%6.2f, output: %6.2f\n",setpoint,pv,error,Pout,Iout,Dout,output);
+  if(abs(Pout) > 1.2)
+    Pout = copysign(1.2,Pout);
+  if(abs(Iout) > 1.2)
+    Iout = copysign(1.0,Iout);
+  if(abs(Dout) > 1.2)
+    Dout = copysign(1.2,Dout);
+    
+  *P=Pout;
+  *I=Iout;
+  *D=Dout;
   // Restrict to max/min
   if( output > _max )
     output = _max;
