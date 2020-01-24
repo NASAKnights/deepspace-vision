@@ -374,8 +374,10 @@ void* i2cSlave(void* arg){
     //printf("line=%s\n",line);
     float roll, pitch, yaw;
     sscanf(line,"%f,%f,%f",&roll,&pitch,&yaw);
+    /*
     if(!(counterGyro++ % 60))
       printf("angles: %f,%f,%f\n",roll/100.,pitch/100.,yaw/100.);
+    */
     *angleGyro=yaw/100.0f;
   }
 }
@@ -501,7 +503,6 @@ int main(int argc, const char* argv[]){
       pthread_mutex_lock(&targetMutex);
       int nt = findTarget(img, thresholded, targets);
       nullifyStruct(position);
-      printf("nt: %d\n",nt);
       if (nt==2)
 	findAnglePnP(img,tLeft,tRight,&position);
       if (nt==2) {
@@ -538,11 +539,14 @@ int main(int argc, const char* argv[]){
 	positionAV.I=position.I;
 	positionAV.D=position.D;
 
-	//====  PID =====
+
+	//====UPDATES====
+
 	
 	deltaGyro = angleGyro - prevGyro;
-	std::cout << "gyro: " << angleGyro << " , " <<deltaGyro << std::endl;
-	if (abs(positionAV.angle)>20) 
+	//std::cout << "gyro: " << angleGyro << " , " <<deltaGyro << std::endl;
+	
+	if (abs(positionAV.angle)>20 && PIDargs.move) 
 	  servoArgs.angle += deltaGyro/10.; //-- move camera to ...
 	//int servoAngle = servo->readAngle2(); // use instead of servoAgrs belo
 	//printf("angle diff: read: %d, angle: %d, pos angle: %.2f\n",servoAngle,servoArgs.angle,positionAV.angle);
@@ -553,36 +557,47 @@ int main(int argc, const char* argv[]){
 	positionAV.P=PIDargs.P;
 	positionAV.I=PIDargs.I;
 	positionAV.D=PIDargs.D;
+	positionAV.turn = PIDargs.turn;
 
 	// send PID the required values;
 	PIDargs.alpha = positionAV.angle;
 	PIDargs.servoAngle = servoArgs.angle;
+	PIDargs.driveAngle = fixedAngle;
 
-	if(PIDargs.move == false)
-	  PIDargs.driveAngle = fixedAngle;
-	positionAV.turn = PIDargs.turn;
+	// set speed to constant (any values above 0.0 works) iff the target is within 200 && -200 bounds, and the distance to target is >65cm
+	//                       (since the robot calculates the speed based on turn by its self)
+	if(position.OffSetx < 200 && position.OffSetx > -200 && position.dist>65)
+	  positionAV.speed=0.5;//0.25
+
+	// if the auto button is pressed 
+
 	if(buttonPress == 1){
+	  printf("%d\n",servo->readAngle2());
 	  servoArgs.angle = positionAV.angle+positionAV.angle2;
 	  printf("reset \n");
 	  PIDargs.move = true;
 	}
-	//pid was here
 
-	// set speed to constant (any values above 0.0 works) iff the target is within 200 && -200 bounds, and the distance to target is >65cm
-	//                       (since the robot calculates the speed based on turn by its self)
-	if(position.OffSetx < 200 && position.OffSetx > -200)
-	  if(position.dist>65)
-	    positionAV.speed=0.5;//0.25
+	/*
 
-	
-	if(PIDargs.move && switchBool){
-	  for(int i=0;i<10;i++){
-	    positionAV.turn = PIDargs.turn;
-	    //usleep(100*1000);
-	  }
+	if(buttonPress == 1){
+	  if(!switchBool)
+	    servoArgs.angle = positionAV.angle+positionAV.angle2;
+	  printf("reset \n");
+	  PIDargs.move = true;
+	} else {
+	  switchBool = true;
+	  PIDargs.move = false;
+	}
+
+	if(buttonPress == 1 && switchBool){
 	  switchBool = false;
-	} else if(PIDargs.move)
-	  PIDargs.driveAngle = fixedAngle;
+	  PIDargs.move = true;
+	  usleep(servoArgs.angle*3.0*1000);
+	  servoArgs.angle = 0.0;
+	}
+	*/
+
 	
 	if(qdebug > 4){
 	  std::cout << "" << std::endl;
@@ -599,42 +614,39 @@ int main(int argc, const char* argv[]){
 	
 	//printf("found: frFound: %d, frLost:%d\n",frFound, frLost);
       }else{
-	if(switches.TURNCAM){
-	if(resetCam){
-	  resetCam = false;
-	  servoArgs.angle=-90;
-	  gettimeofday(&lostAtTime,NULL);
-	}
-	
-	if(frLost >= 15 && frFound >= 5){
-	  resetCam = true;
-	  frFound = 0;
-	  frLost = 0;
-	}
-	if(frLost >= 20){
-	  frFound = 0;
-	  frLost = 21;
-	}
-	}
 	nullifyStruct(positionAV);
 	positionAV.z=-1;
 	if(switches.TURNCAM){
-	frLost++;
-	missFR++;
-	gettimeofday(&timeTest,NULL);
-	double dt = (timeTest.tv_usec-lostAtTime.tv_usec+1000000 * (timeTest.tv_sec - lostAtTime.tv_sec))*1e-6;
-	//printf("lost: frFound: %d, frLost:%d\n",frFound, frLost);
-	if(dt > .5){
-	  if(servoArgs.angle<60){
-	    if(frFound < 5 && frLost > 3){
+	  if(resetCam){
+	    resetCam = false;
+	    servoArgs.angle=-90;
+	    gettimeofday(&lostAtTime,NULL);
+	  }
+	  if(frLost >= 15 && frFound >= 5){
+	    resetCam = true;
+	    frFound = 0;
+	    frLost = 0;
+	  }
+	  if(frLost >= 20){
+	    frFound = 0;
+	    frLost = 21;
+	  }
+	  frLost++;
+	  missFR++;
+	  gettimeofday(&timeTest,NULL);
+	  double dt = (timeTest.tv_usec-lostAtTime.tv_usec+1000000 * (timeTest.tv_sec - lostAtTime.tv_sec))*1e-6;
+	  //printf("lost: frFound: %d, frLost:%d\n",frFound, frLost);
+	  if(dt > .5){
+	    if(servoArgs.angle<60){
+	      if(frFound < 5 && frLost > 3){
 	      servoArgs.angle += 30;
 	      printf("servo incrment Angle: %d\n",servoArgs.angle);
+	      }
 	    }
+	    else
+	      resetCam = true;
+	    gettimeofday(&lostAtTime,NULL);
 	  }
-	  else
-	  resetCam = true;
-	  gettimeofday(&lostAtTime,NULL);
-	}
 	}
       }
       if(switches.SHOWORIG)
@@ -682,7 +694,7 @@ int main(int argc, const char* argv[]){
 	}
       }
     }
-    //waitKey(5);
+    waitKey(5);
 
     newFrame = false;
     usleep(10000);
