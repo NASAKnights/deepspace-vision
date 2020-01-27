@@ -6,6 +6,7 @@
 #include <sys/ioctl.h>
 #include <linux/i2c-dev.h>
 #include <cstdint>
+#include <iostream>
 //stty -F /dev/ttyS0 115200
 int addr = 0x04;
 int file_i2c;
@@ -19,7 +20,7 @@ bool setAngle(double angle){
   if(angle<-90)
     angle=-90;
   angle = angle/90. * 350;
-  angle += 350;//350 = centered                                                           
+  angle += 350;//350 = centered
   int16_t sendAngle = (int) angle;
   printf("buffer sending: %d\n",sendAngle);
   length = sizeof(sendAngle);
@@ -28,13 +29,20 @@ bool setAngle(double angle){
 }
 
 int16_t readAngle(){
+  int16_t i = -1;
+  length = sizeof(int16_t);
+  if (write(file_i2c, &i, length) != length)
+    printf("Failed to write to the i2c bus.\n");
+  usleep(50*1000);
   unsigned char buf[32];
   int16_t angle;
   length = 2;
   if (read(file_i2c,buf, length) != length)
     printf("Failed to read from the i2c bus.\n");
   angle = buf[0] | buf[1]<<8;
-  return angle;
+  angle -= 350;//350 = centered
+  angle = angle/350. * 90;
+  return angle;//check for returning of 63 degrees or 597 in their system
 }
 
 
@@ -51,6 +59,7 @@ int main(int argc, char* argv[]){
 
   
   int angle = 0;
+  int rAngle = 0;
   if(argc>1)
     angle = atoi(argv[1]);
   printf("angle= %d\n",angle);
@@ -60,10 +69,17 @@ int main(int argc, char* argv[]){
   //usleep(1000*1000);
   //servo->setAngle(angle);
   //usleep(15000*1000);
-  setAngle(angle);
-  usleep(1000*1000);
-  printf("read: %d\n",readAngle());
-  
+  while(true){
+    angle = rand() % 180 - 90;
+    //std::cin >> angle;
+    setAngle(angle);
+    while(abs(rAngle-angle)>1){
+      usleep(10*1000);
+      rAngle = readAngle();
+      if(rAngle != 63)
+	printf("read: %d\n",rAngle);
+    }
+  }
 
 
 
