@@ -63,12 +63,6 @@ int main(int argc, char* argv[]){
   if(argc>1)
     angle = atoi(argv[1]);
   printf("angle= %d\n",angle);
-  //LX16ABus * bus = new LX16ABus();
-  //bus->openBus("/dev/ttyAMA0");
-  //LX16AServo * servo = new LX16AServo(bus,1);
-  //usleep(1000*1000);
-  //servo->setAngle(angle);
-  //usleep(15000*1000);
   while(true){
     angle = rand() % 180 - 90;
     //std::cin >> angle;
