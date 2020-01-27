@@ -283,7 +283,8 @@ Mat ThresholdImage(Mat original)
 
 //-Threads-----------------------------------------------------------------------
 
-bool setAngle(double angle){
+bool setAngle(int angle){
+  printf("setting to angle: %d\n",angle);
   if(angle>90)
     angle=90;
   if(angle<-90)
@@ -291,7 +292,7 @@ bool setAngle(double angle){
   angle = angle/90. * 350;
   angle += 350;//350 = centered                                                                                     
   int16_t sendAngle = (int) angle;
-  printf("buffer sending: %d\n",sendAngle);
+  //printf("buffer sending: %d\n",sendAngle);
   length = sizeof(sendAngle);
   if (write(file_i2c, &sendAngle, length) != length)
     printf("Failed to write to the i2c bus.\n");
@@ -311,27 +312,20 @@ int16_t readAngle(){
   angle = buf[0] | buf[1]<<8;
   angle -= 350;//350 = centered                                                                                     
   angle = angle/350. * 90;
+  printf("read angle: %d\n",angle);
   return angle;//check for returning of 63 degrees or 597 in their system                                           
 }
-
-
-/*void* moveServo(void *arg){
-  while(true){
-    ServoArgs* obj = (ServoArgs*) arg;
-    obj->servo->setAngle(obj->angle * -1);
-    usleep(50*1000);
-  }
-  }*/
-/*
 void* moveServo(void *arg){
   while(true){
     ServoArgs* obj = (ServoArgs*) arg;
-    setAngle(obj->angle * -1);
-    //obj->servo->setAngle(obj->angle * -1);
-    usleep(50*1000);
+    setAngle(obj->angle);
+    usleep(20*1000);
+    int readTest = readAngle();
+    if(readTest != 63)
+      obj->readAngle = readTest;
+    usleep(20*1000);
   }
 }
-*/
 
 
 
@@ -490,7 +484,7 @@ int main(int argc, const char* argv[]){
   }
   printf("tr : %d\n",switches.SHOWTRACK);
 
-    if ((file_i2c = open(filename, O_RDWR)) < 0){
+  if ((file_i2c = open(filename, O_RDWR)) < 0){
     printf("Failed to open the i2c bus");
     return false;
   }
@@ -500,12 +494,12 @@ int main(int argc, const char* argv[]){
   }
 
 
-  int angle = 0;
+  /*  int angle = 0;
   int rAngle = 0;
+  
   if(argc>1)
     angle = atoi(argv[1]);
   printf("angle= %d\n",angle);
-  /*
   while(true){
     angle = rand() % 180 - 90;
     //std::cin >> angle;                                                                                            
@@ -536,9 +530,10 @@ int main(int argc, const char* argv[]){
   ServoArgs servoArgs;
   if(switches.SERVO){
     servoArgs.angle = 0;
+    servoArgs.readAngle = 0;
     //servoArgs.servo = servo;
-    //pthread_create(&moveServoThread,NULL,moveServo, &servoArgs);
-    //pthread_setname_np(moveServoThread,"MoveServoThread");
+    pthread_create(&moveServoThread,NULL,moveServo, &servoArgs);
+    pthread_setname_np(moveServoThread,"MoveServoThread");
   }
   gettimeofday(&t1, NULL);
   gettimeofday(&timeTest,NULL);
@@ -631,7 +626,7 @@ int main(int argc, const char* argv[]){
 	
 	//int servoAngle = servo->readAngle2(); // use instead of servoAgrs belo
 	//printf("angle diff: read: %d, angle: %d, pos angle: %.2f\n",servoAngle,servoArgs.angle,positionAV.angle);
-	fixedAngle = positionAV.angle+(-angleGyro)+readAngle()+(-positionAV.angle2); // calculate the needed position for the turn
+	fixedAngle = positionAV.angle+(-angleGyro)+servoArgs.readAngle+(-positionAV.angle2); // calculate the needed position for the turn
 	prevGyro = angleGyro;
 
 	// set PID args to send to server;
@@ -642,7 +637,7 @@ int main(int argc, const char* argv[]){
 
 	// send PID the required values;
 	PIDargs.alpha = positionAV.angle;
-	PIDargs.servoAngle = servoArgs.angle;
+	PIDargs.servoAngle = servoArgs.readAngle;
 	PIDargs.driveAngle = fixedAngle;
 
 	// set speed to constant (any values above 0.0 works) iff the target is within 200 && -200 bounds, and the distance to target is >65cm
@@ -660,7 +655,7 @@ int main(int argc, const char* argv[]){
 	//if (abs(positionAV.angle)>20 && PIDargs.move) 
 	// servoArgs.angle += deltaGyro/10.; //-- move camera to ...
 
-	printf("angles: alpha: %4.2f, alpha2: %4.2f, servoAngle: %d, gyro: %4.2f\n",positionAV.angle,positionAV.angle2,servoArgs.angle,angleGyro);
+	printf("angles: alpha: %4.2f, alpha2: %4.2f, servoAngle: %d, gyro: %4.2f\n",positionAV.angle,positionAV.angle2,servoArgs.readAngle,angleGyro);
 	/*
 	double sa = positionAV.angle+positionAV.angle2;
 	if(abs(positionAV.angle) < 20){
@@ -674,7 +669,7 @@ int main(int argc, const char* argv[]){
 	printf("read: %d\n",readAngle());
 	if(buttonPress == 1){
 	  //servoArgs.angle = positionAV.angle;
-	  setAngle((int) positionAV.angle);
+	  servoArgs.angle = (int) positionAV.angle;
 	  
 
 	  
@@ -723,7 +718,8 @@ int main(int argc, const char* argv[]){
 	if(switches.TURNCAM){
 	  if(resetCam){
 	    resetCam = false;
-	    setAngle(-90);
+	    printf("\ncam reset\n\n");
+	    servoArgs.angle = -90;
 	    usleep(1000*1000);
 	    gettimeofday(&lostAtTime,NULL);
 	  }
@@ -742,9 +738,9 @@ int main(int argc, const char* argv[]){
 	  double dt = (timeTest.tv_usec-lostAtTime.tv_usec+1000000 * (timeTest.tv_sec - lostAtTime.tv_sec))*1e-6;
 	  printf("lost: frFound: %d, frLost:%d\n",frFound, frLost);
 	  if(dt > .1){
-	    if(servoArgs.angle<60){
+	    if(servoArgs.readAngle<60){
 	      if(frFound < 5 && frLost > 3){
-		setAngle(readAngle()+10);
+		servoArgs.angle+=10;
 		printf("servo incrment Angle: %d\n",servoArgs.angle);
 	      }
 	    }
