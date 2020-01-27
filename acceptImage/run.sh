@@ -4,7 +4,7 @@ COLOR=${2-none}
 
 if [[ ${IP} == robot ]]
 then
-    IP=10.1.22.91
+    IP=10.1.22.43
 elif [[ ${IP} == localhost ]]
 then
     IP=127.0.0.1
