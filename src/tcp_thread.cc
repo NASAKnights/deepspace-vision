@@ -175,9 +175,10 @@ int tcp_listen3(int sd, char* host_name, int len, int *sd_current){
 /*====================================================================*/
 int tcp_listen_th(int sd){
   char rem_host[160];
-  int rem_port;
+  //int rem_port;
   int sd_current;
-  rem_port=tcp_listen3(sd, rem_host, 160-1, &sd_current);
+  //rem_port=
+  tcp_listen3(sd, rem_host, 160-1, &sd_current);
   return sd_current;
 }
 /*==================================================================*/

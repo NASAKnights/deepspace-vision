@@ -7,7 +7,6 @@ public:
   double calculate( double setpoint, double pv ,double dt,double* P, double* I, double* D);
   void button(int buttonState);
 private:
-  int oldState;
   double _dt;
   double _max;
   double _min;
@@ -16,6 +15,8 @@ private:
   double _Ki;
   double _pre_error;
   double _integral;
+  int oldState;
+
 };
 
 #endif

@@ -34,16 +34,6 @@ typedef struct {
   double D;
 }Position;
 
-struct PIDArgs{
-  double turn;
-  double alpha;
-  double servoAngle;
-  double driveAngle;
-  double P;
-  double I;
-  double D;
-  bool move;
-};
 
 class Targets{
 public:
@@ -81,17 +71,4 @@ public:
       points[i].y=0;
     }
   }
-  /*
-  void Show(){
-    int W = width;
-    int H = height;
-    std::cout << "Number: " << number << std::endl;
-    std::cout << "\tTarget found?: " << found;
-    if (found == "no"){
-      std::cout << "--" << reason << std::endl;
-    } else {
-      std::cout << "" << std::endl;
-    }
-  }
-  */
 };

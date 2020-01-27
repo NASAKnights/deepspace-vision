@@ -70,8 +70,8 @@ pthread_t moveServoThread;
 void* moveServo(void* arg);
 pthread_t videoServerThread;
 void* videoServer(void* arg);
-pthread_t i2cSlaveThread;
-void* i2cSlave(void* arg);
+pthread_t USBSlaveThread;
+void* USBSlave(void* arg);
 pthread_t PIDThread;
 void* movePID(void* arg);
 pthread_mutex_t frameMutex = PTHREAD_MUTEX_INITIALIZER;
@@ -82,27 +82,21 @@ const std::string trackbarWindowName = "Trackbars";
 std::vector <Point>totalfound;
 const Scalar BLUE = Scalar(255, 0, 0), RED = Scalar(0,0,255), YELLOW = Scalar(0,255,255);
 
-//threads
-void *opentcp(void *arg);
-void *videoServer(void *arg);
-void *moveServo(void *arg);
-void *i2cSlave(void *arg);
 int remoteSocket = 0;
 int videoPort;
 int videoError = 0;
-float angleGyro = 0;
-float fixedAngle = 0;
+float gyroAngle = 0;
+float driveAngle = 0;
 
 Targets *tLeft;
 Targets *tRight;
 void findAnglePnP(cv::Mat im, Targets *tLeft, Targets *tRight, Position *position);
 
-struct ServoArgs{
-  //LX16AServo* servo;
-  int angle;
-  int readAngle;
-};
-
+int setServoAngle;
+int readServoAngle;
+double P, I, D;
+double turn;
+bool move;
 
 //FUNCTIONS----------------------------------------------------------------------
 void on_trackbar(int, void*)
@@ -124,6 +118,7 @@ void morphOps(Mat &thresh)
 void createTrackbars()
 {
   namedWindow(trackbarWindowName, 0);
+  /*
   char TrackbarName[50];
   sprintf( TrackbarName, "H_MIN", minH);
   sprintf( TrackbarName, "H_MAX", maxH);
@@ -131,6 +126,7 @@ void createTrackbars()
   sprintf( TrackbarName, "S_MAX", maxS);
   sprintf( TrackbarName, "V_MIN", minV);
   sprintf( TrackbarName, "V_MAX", maxV);
+  */
   createTrackbar( "H_MIN", trackbarWindowName, &minH, 255, on_trackbar );
   createTrackbar( "H_MAX", trackbarWindowName, &maxH, 255, on_trackbar );
   createTrackbar( "S_MIN", trackbarWindowName, &minS, 255, on_trackbar );
@@ -173,7 +169,7 @@ int findTarget(Mat original, Mat thresholded, Targets *targets)
 
   if (!contours.empty() && !hierarchy.empty()) {
 
-    for (int i = 0; i < contours.size(); i++){
+    for (int i = 0; i < (int) contours.size(); i++){
       targets[i].NullTargets();
       if (hierarchy[i][2]!=-1) {if (qdebug>2) printf("failed hierarchy\n"); continue;}
       minRect[i] = minAreaRect(Mat(contours[i]));
@@ -296,6 +292,7 @@ bool setAngle(int angle){
   length = sizeof(sendAngle);
   if (write(file_i2c, &sendAngle, length) != length)
     printf("Failed to write to the i2c bus.\n");
+  return true;
 }
 
 int16_t readAngle(){
@@ -317,44 +314,32 @@ int16_t readAngle(){
 }
 void* moveServo(void *arg){
   while(true){
-    ServoArgs* obj = (ServoArgs*) arg;
-    setAngle(obj->angle);
+    setAngle(setServoAngle);
     usleep(20*1000);
     int readTest = readAngle();
     if(readTest != 63)
-      obj->readAngle = readTest;
+      readServoAngle = readTest;
     usleep(20*1000);
   }
 }
 
-
-
 void* movePID(void* arg){
-  PIDArgs* args = (PIDArgs*) arg;
   PID* drivePID;
   struct timeval tnew, told;
-  double turn, dt;
-  //drivePID = new PID(0.1,1,-1, Pc, Ic, Dc);  // -- init PID P=0.015
+  double turnLoc, dt;
   drivePID = new PID(0.0,1,-1, 0.01,0.001,0.007); // 0.007 // 0 // 0.008
+  
   while(true){
     gettimeofday(&tnew,NULL);
     dt = (tnew.tv_usec-told.tv_usec+1000000 * (tnew.tv_sec - told.tv_sec))*1e-6;
+    printf("dt: %.2f\n",dt);
     if(told.tv_sec==0)
       dt = 0.1;
-    turn = 0;
+    turnLoc = 0;
     drivePID->button(buttonPress);
-    turn = drivePID->calculate(args->driveAngle,-angleGyro,dt,&args->P,&args->I,&args->D);
-    
-    //printf(", PnP:%.2f\n",args->alpha);
-    args->turn = turn;
-    /*
-    if(buttonPress == 1 && args->move){
-      args->turn = turn;
-    } else
-      args->turn = 0;
-    */
+    turnLoc = drivePID->calculate(driveAngle,-gyroAngle,dt,&P,&I,&D);
+    turn = turnLoc;
     told = tnew;
-    //printf("PID: turn: %.2f, driveAngle: %.2f, gyro: %.2f, dt: %f button: %d\n",turn, args->driveAngle, -angleGyro,dt,buttonPress);
     usleep(10*1000);
   }
 }
@@ -398,41 +383,33 @@ inline void nullifyStruct(Position &pos){
   pos.D=0;
   
 }
-void* i2cSlave(void* arg){
-  float *angleGyro = (float*) arg;
+void* USBSlave(void* arg){
   printf("enter gyro slave\n");
   int ttyFid = open("/dev/ttyUSB0", O_RDWR);
   if (ttyFid == -1){
     printf( "Error unable to open port\n");
   }
   printf("enter readBus\n");
-  unsigned char ch;
-  int ret;
   char line[256];
-  int counterGyro = 0;
   while(true){
     for(int ii=0;ii<200;ii++){
       int nb = read(ttyFid,&line[ii],1);
       if(nb!=1)
-	printf("nb=%d %c\n",nb,ch);
+	printf("nb=%d\n",nb);
       if(nb<0){sleep(1); ii=11; continue;}
       if(line[ii]=='\n') {line[ii+1]=0; break;}
     }
     //printf("line=%s\n",line);
     float roll, pitch, yaw;
     sscanf(line,"%f,%f,%f",&roll,&pitch,&yaw);
-    /*
-    if(!(counterGyro++ % 60))
-      printf("angles: %f,%f,%f\n",roll/100.,pitch/100.,yaw/100.);
-    */
-    *angleGyro=yaw/100.0f;
+    gyroAngle=yaw/100.0f;
   }
 }
 
 int main(int argc, const char* argv[]){
   int frFound = 0;
   int frLost = 0;
-  double deltaGyro, prevGyro = 0;
+  //double deltaGyro, prevGyro = 0;
   Switches switches;
   switches.SERVO = false;
   switches.SHOWORIG = false;
@@ -459,9 +436,9 @@ int main(int argc, const char* argv[]){
       return 0;
     }
     printf("args size: %d\n",args.size());
-    for(int i=1;i<args.size();i++)
+    for(int i=1;i<(int)args.size();i++)
       token.push_back(args.substr(i,1));
-    for(int i=0;i<token.size();i++){
+    for(int i=0;i<(int)token.size();i++){
       if(token[i]=="c")
 	switches.USECOLOR = true;
       if(token[i]=="t")
@@ -514,25 +491,12 @@ int main(int argc, const char* argv[]){
   */
   
   Mat img, HSV, thresholded, output;
-  //LX16ABus * bus = new LX16ABus();
-  bool switchBool = true;
   bool resetCam = true;
-  angleGyro = 0;
-  fixedAngle = 0;
-  //bus->openBus("/dev/ttyUSB1");
-  //LX16AServo * servo = new LX16AServo(bus,1);
-  PIDArgs PIDargs;
-  PIDargs.move = false;
-  PIDargs.alpha = 0;
-  PIDargs.servoAngle = 0;
-  PIDargs.driveAngle = 0;
+  gyroAngle = 0;
+  driveAngle = 0;
   srand(time(NULL));
-  ServoArgs servoArgs;
   if(switches.SERVO){
-    servoArgs.angle = 0;
-    servoArgs.readAngle = 0;
-    //servoArgs.servo = servo;
-    pthread_create(&moveServoThread,NULL,moveServo, &servoArgs);
+    pthread_create(&moveServoThread,NULL,moveServo, NULL);
     pthread_setname_np(moveServoThread,"MoveServoThread");
   }
   gettimeofday(&t1, NULL);
@@ -544,15 +508,15 @@ int main(int argc, const char* argv[]){
   Targets targets[MAXTARGETS];
   pthread_create(&tcpserver, NULL, opentcp, &positionAV);
   pthread_create(&MJPEG, NULL, VideoCap, NULL);
-  pthread_create(&i2cSlaveThread, NULL, i2cSlave,&angleGyro);
-  pthread_create(&PIDThread, NULL, movePID, &PIDargs);
+  pthread_create(&USBSlaveThread, NULL, USBSlave,NULL);
+  pthread_create(&PIDThread, NULL, movePID, NULL);
   int rc = pthread_setname_np(MJPEG, "MJPEG Thread");
   if (rc != 0)
     printf("MJPEG thread fail%d\n",rc);
   rc = pthread_setname_np(tcpserver, "tcpserver");
   if (rc != 0)
     printf("tcp thread fail%d\n",rc);
-  rc = pthread_setname_np(i2cSlaveThread,"GyroThread");
+  rc = pthread_setname_np(USBSlaveThread,"GyroThread");
   if (rc != 0)
     printf("gyro thread fail%d\n",rc);
   
@@ -583,8 +547,6 @@ int main(int argc, const char* argv[]){
       if (nt==2)
 	findAnglePnP(img,tLeft,tRight,&position);
       if (nt==2) {
-	position.gyro=angleGyro;
-	//printf("angleGyro: %f, fixed: %f, PnP: %f\n",position.gyro,fixedAngle,position.angle);
 	//put latest values into avaraging struct, delete old one.
 	posA.push_back(position);
 	if(posA.size()>ASIZE)
@@ -609,99 +571,47 @@ int main(int argc, const char* argv[]){
 	positionAV.angle2/=posA.size();
 	positionAV.dist/=posA.size();
 	positionAV.OffSetx/=posA.size();
-	positionAV.speed=position.speed;
-	positionAV.turn=position.turn;
-	positionAV.gyro=position.gyro;
-	positionAV.P=position.P;
-	positionAV.I=position.I;
-	positionAV.D=position.D;
+	positionAV.gyro=gyroAngle;
 
 
 	//====UPDATES====
 
 	
-	deltaGyro = angleGyro - prevGyro;
-	//std::cout << "gyro: " << angleGyro << " , " <<deltaGyro << std::endl;
-		
-	
-	//int servoAngle = servo->readAngle2(); // use instead of servoAgrs belo
-	//printf("angle diff: read: %d, angle: %d, pos angle: %.2f\n",servoAngle,servoArgs.angle,positionAV.angle);
-	fixedAngle = positionAV.angle+(-angleGyro)+servoArgs.readAngle+(-positionAV.angle2); // calculate the needed position for the turn
-	prevGyro = angleGyro;
+	//deltaGyro = gyroAngle - prevGyro;
+	driveAngle = positionAV.angle+(-gyroAngle)+readServoAngle+(-positionAV.angle2); // calculate the needed position for the turn
+	//prevGyro = gyroAngle;
 
 	// set PID args to send to server;
-	positionAV.P=PIDargs.P;
-	positionAV.I=PIDargs.I;
-	positionAV.D=PIDargs.D;
-	positionAV.turn = PIDargs.turn;
+	positionAV.P=P;
+	positionAV.I=I;
+	positionAV.D=D;
+	positionAV.turn = turn;
 
-	// send PID the required values;
-	PIDargs.alpha = positionAV.angle;
-	PIDargs.servoAngle = servoArgs.readAngle;
-	PIDargs.driveAngle = fixedAngle;
 
 	// set speed to constant (any values above 0.0 works) iff the target is within 200 && -200 bounds, and the distance to target is >65cm
 	//                       (since the robot calculates the speed based on turn by its self)
 	if(position.dist>65 && buttonPress == 1)
 	  positionAV.speed=0.5;//0.25
 
-	// if the auto button is pressed 
-	
-	//if(abs(positionAV.angle)>10){
-	//servoArgs.angle += positionAV.angle;//copysign(,(positionAV.angle));
-	//}
-	//printf("adding to servo %2.1f, added: %3.2f+%3.2f=%3.2f\n",copysign(1.0,(servoArgs.angle+positionAV.angle)),servoArgs.angle,positionAV.angle,servoArgs.angle+positionAV.angle);
-	
-	//if (abs(positionAV.angle)>20 && PIDargs.move) 
-	// servoArgs.angle += deltaGyro/10.; //-- move camera to ...
-
-	printf("angles: alpha: %4.2f, alpha2: %4.2f, servoAngle: %d, gyro: %4.2f\n",positionAV.angle,positionAV.angle2,servoArgs.readAngle,angleGyro);
 	/*
-	double sa = positionAV.angle+positionAV.angle2;
-	if(abs(positionAV.angle) < 20){
-	  if(sa<-20) sa=-20;
-	  if(sa>20) sa=20;
-	  printf("sangles: %3.2f\n",sa);
-	  servoArgs.angle += sa;
+	if(abs(positionAV.angle)>10){
+	  servoArgs.angle += positionAV.angle;//copysign(,(positionAV.angle));
 	}
-	*/
+        */
 
-	printf("read: %d\n",readAngle());
-	if(buttonPress == 1){
-	  //servoArgs.angle = positionAV.angle;
-	  servoArgs.angle = (int) positionAV.angle;
-	  
-
-	  
-	  PIDargs.move = true;
-	}
-	//printf("angle read: %d \n",servo->readAngle());
-
-	/*
+	printf("angles: alpha: %4.2f, alpha2: %4.2f, readServoAngle: %d, gyro: %4.2f\n",positionAV.angle,positionAV.angle2,readServoAngle,gyroAngle);
 
 	if(buttonPress == 1){
-	  if(!switchBool)
-	    servoArgs.angle = positionAV.angle+positionAV.angle2;
-	  printf("reset \n");
-	  PIDargs.move = true;
-	} else {
-	  switchBool = true;
-	  PIDargs.move = false;
+	  setServoAngle = (int) positionAV.angle; 
+	  move = true;
 	}
-
-	if(buttonPress == 1 && switchBool){
-	  switchBool = false;
-	  PIDargs.move = true;
-	  usleep(servoArgs.angle*3.0*1000);
-	  servoArgs.angle = 0.0;
-	}
-	*/
 
 	
 	if(qdebug > 4){
 	  std::cout << "" << std::endl;
 	  std::cout << "/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*" << std::endl;
 	}
+	
 	if(switches.TURNCAM){
 	  frFound++;
 	  if(frFound >= 5){
@@ -710,7 +620,6 @@ int main(int argc, const char* argv[]){
 	    resetCam = false;
 	  }
 	}
-	
 	printf("found: frFound: %d, frLost:%d\n",frFound, frLost);
       }else{
 	nullifyStruct(positionAV);
@@ -719,7 +628,7 @@ int main(int argc, const char* argv[]){
 	  if(resetCam){
 	    resetCam = false;
 	    printf("\ncam reset\n\n");
-	    servoArgs.angle = -90;
+	    setServoAngle = -90;
 	    usleep(1000*1000);
 	    gettimeofday(&lostAtTime,NULL);
 	  }
@@ -738,10 +647,10 @@ int main(int argc, const char* argv[]){
 	  double dt = (timeTest.tv_usec-lostAtTime.tv_usec+1000000 * (timeTest.tv_sec - lostAtTime.tv_sec))*1e-6;
 	  printf("lost: frFound: %d, frLost:%d\n",frFound, frLost);
 	  if(dt > .1){
-	    if(servoArgs.readAngle<60){
+	    if(readServoAngle<60){
 	      if(frFound < 5 && frLost > 3){
-		servoArgs.angle+=10;
-		printf("servo incrment Angle: %d\n",servoArgs.angle);
+		setServoAngle+=10;
+		printf("servo incrment Angle: %d\n",setServoAngle);
 	      }
 	    }
 	    else

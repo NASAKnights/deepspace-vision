@@ -47,7 +47,7 @@ int func(int sockfd, Position *pos)
   char mesg[MLEN];
   char buff[MAXLINE]; 
   char line[MAXLINE]; 
-  int i,ib,il,n,lflg; 
+  int ib,il,lflg;//i,n 
   int lenbuf=0;
   // infinite loop for chat 
   for (;;) { 
@@ -112,6 +112,7 @@ int func(int sockfd, Position *pos)
       break; 
     } 
   } // for loop
+  return 1;
 } 
 
 // Driver function
@@ -200,7 +201,7 @@ static void *run_cl_thread (void* arg) {
     struct CLIENT *clnt = (struct CLIENT*) arg;
     unsigned int Kclnt = clnt->Kclnt;
     int sd_current= clnt->sd_current;
-    int rem_port=clnt->rem_port;
+    //int rem_port=clnt->rem_port;
 
     printf("start new client thread , Kclnt=%d sd=%d \n",Kclnt,sd_current);
     //tcp_close_old();  // ???

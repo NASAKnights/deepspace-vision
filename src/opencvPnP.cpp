@@ -94,12 +94,12 @@ void findAnglePnP(cv::Mat im, Targets *tLeft, Targets *tRight,Position* position
 
 
   /*
-  img2dpoints.push_back(cv::Point2d(center.x-100+dx,center.y-100-dy));
-  img2dpoints.push_back(cv::Point2d(center.x-100+dx,center.y+100+dy));
-  img2dpoints.push_back(cv::Point2d(center.x+100-dx,center.y+100-dy));
-  img2dpoints.push_back(cv::Point2d(center.x+100-dx,center.y-100+dy));
+    img2dpoints.push_back(cv::Point2d(center.x-100+dx,center.y-100-dy));
+    img2dpoints.push_back(cv::Point2d(center.x-100+dx,center.y+100+dy));
+    img2dpoints.push_back(cv::Point2d(center.x+100-dx,center.y+100-dy));
+    img2dpoints.push_back(cv::Point2d(center.x+100-dx,center.y-100+dy));
   */
-   if (model==0) {  model = 1;
+  if (model==0) {  model = 1;
 
     //--- build targer geometry ; should be called only once !!!
     //--- target consists of 2 reflective boxes
@@ -122,7 +122,7 @@ void findAnglePnP(cv::Mat im, Targets *tLeft, Targets *tRight,Position* position
     if(debugPnP>3)
       std::cout << "rotML = " << rotML << std::endl;
   
-    for(int i=0; i < tBox.size(); i++) {
+    for(int i=0; i < (int) tBox.size(); i++) {
       //cv::Mat boxM(cv::Point2d(tBox[i].x,tBox[i].y));
       cv::Mat boxM = (cv::Mat_<double>(3,1) << tBox[i].x, tBox[i].y,0.);
       if(debugPnP>3)
@@ -136,7 +136,7 @@ void findAnglePnP(cv::Mat im, Targets *tLeft, Targets *tRight,Position* position
 	cv::Point2d bps=bp+shiftL;
 	mod2d.push_back((bps)*zoom+shiftG);
 	mod3d.push_back(cv::Point3d(bps.x,bps.y,0.));
-	}
+      }
 #endif
     }
 
@@ -144,7 +144,7 @@ void findAnglePnP(cv::Mat im, Targets *tLeft, Targets *tRight,Position* position
     //-- second build right box
     cv::Point2d shiftR(+tDist/2.,0.);
     cv::Mat rotMR = cv::getRotationMatrix2D(rc, +tAngle, 1.0);  
-    for(int i=0; i < tBox.size(); i++) {
+    for(int i=0; i < (int) tBox.size(); i++) {
       //cv::Mat boxM(cv::Point2d(tBox[i].x,tBox[i].y));
       cv::Mat boxM = (cv::Mat_<double>(3,1) << tBox[i].x, tBox[i].y,0.);
       cv::Mat boxMrot = rotMR*boxM;
@@ -156,17 +156,17 @@ void findAnglePnP(cv::Mat im, Targets *tLeft, Targets *tRight,Position* position
 	cv::Point2d bps=bp+shiftR;
 	mod2d.push_back((bps)*zoom+shiftG);
 	mod3d.push_back(cv::Point3d(bps.x,bps.y,0.));
-	}
+      }
 #endif
     }
-   } //--- end model build
-for(int i=0; i < mod3d.size(); i++) {
-  //circle(im, mod2d[i], i, cv::Scalar(0,255,0), 2);
+  } //--- end model build
+  for(int i=0; i < (int) mod3d.size(); i++) {
+    //circle(im, mod2d[i], i, cv::Scalar(0,255,0), 2);
     circle(im, cv::Point2d(mod3d[i].x*9+center.x,mod3d[i].y*9+center.y+20), i, cv::Scalar(255,255,0), 2);
-    
+     
   }
   //-----------  initialization of camera -------------
-  
+   
   double focal_length = im.cols;
   cv::Mat camera_matrix = (cv::Mat_<double>(3,3) << focal_length, 0, center.x, 0 , focal_length, center.y, 0, 0, 1);
   //cv::Mat camera_matrix = (cv::Mat_<double>(3,3) << 1219, 0, center.x, 0 , 1241, center.y, 0, 0, 1);
@@ -206,7 +206,7 @@ for(int i=0; i < mod3d.size(); i++) {
   projectPoints(axis3D, rvec, tvec, camera_matrix, dist_coeffs, axis2D);
   if(debugPnP>3)
     std::cout << " axis 2D = " << axis2D << std::endl;
-  for(int i=0; i < img2dpoints.size (); i++){
+  for(int i=0; i < (int) img2dpoints.size (); i++){
     circle(im, img2dpoints[i], i*3, cv::Scalar(0,0,255), 2);
   }
   cv::line(im, tc, axis2D[0], cv::Scalar(255,0,0),2);//x-blue
