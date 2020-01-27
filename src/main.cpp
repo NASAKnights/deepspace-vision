@@ -545,9 +545,8 @@ int main(int argc, const char* argv[]){
 	
 	deltaGyro = angleGyro - prevGyro;
 	//std::cout << "gyro: " << angleGyro << " , " <<deltaGyro << std::endl;
+		
 	
-	if (abs(positionAV.angle)>20 && PIDargs.move) 
-	  servoArgs.angle += deltaGyro/10.; //-- move camera to ...
 	//int servoAngle = servo->readAngle2(); // use instead of servoAgrs belo
 	//printf("angle diff: read: %d, angle: %d, pos angle: %.2f\n",servoAngle,servoArgs.angle,positionAV.angle);
 	fixedAngle = positionAV.angle+(-angleGyro)+servoArgs.angle+(-positionAV.angle2); // calculate the needed position for the turn
@@ -566,17 +565,40 @@ int main(int argc, const char* argv[]){
 
 	// set speed to constant (any values above 0.0 works) iff the target is within 200 && -200 bounds, and the distance to target is >65cm
 	//                       (since the robot calculates the speed based on turn by its self)
-	if(position.OffSetx < 200 && position.OffSetx > -200 && position.dist>65)
+	if(position.dist>65 && buttonPress == 1)
 	  positionAV.speed=0.5;//0.25
 
 	// if the auto button is pressed 
+	
+	//if(abs(positionAV.angle)>10){
+	//servoArgs.angle += positionAV.angle;//copysign(,(positionAV.angle));
+	//}
+	//printf("adding to servo %2.1f, added: %3.2f+%3.2f=%3.2f\n",copysign(1.0,(servoArgs.angle+positionAV.angle)),servoArgs.angle,positionAV.angle,servoArgs.angle+positionAV.angle);
+	
+	//if (abs(positionAV.angle)>20 && PIDargs.move) 
+	// servoArgs.angle += deltaGyro/10.; //-- move camera to ...
 
+	printf("angles: alpha: %4.2f, alpha2: %4.2f, servoAngle: %d, gyro: %4.2f\n",positionAV.angle,positionAV.angle2,servoArgs.angle,angleGyro);
+	/*
+	double sa = positionAV.angle+positionAV.angle2;
+	if(abs(positionAV.angle) < 20){
+	  if(sa<-20) sa=-20;
+	  if(sa>20) sa=20;
+	  printf("sangles: %3.2f\n",sa);
+	  servoArgs.angle += sa;
+	}
+	*/
+
+	  
 	if(buttonPress == 1){
-	  printf("%d\n",servo->readAngle2());
-	  servoArgs.angle = positionAV.angle+positionAV.angle2;
-	  printf("reset \n");
+	  //servoArgs.angle = positionAV.angle;
+
+	  
+
+	  
 	  PIDargs.move = true;
 	}
+	//printf("angle read: %d \n",servo->readAngle());
 
 	/*
 
@@ -620,6 +642,7 @@ int main(int argc, const char* argv[]){
 	  if(resetCam){
 	    resetCam = false;
 	    servoArgs.angle=-90;
+	    usleep(1000*1000);
 	    gettimeofday(&lostAtTime,NULL);
 	  }
 	  if(frLost >= 15 && frFound >= 5){
@@ -636,10 +659,10 @@ int main(int argc, const char* argv[]){
 	  gettimeofday(&timeTest,NULL);
 	  double dt = (timeTest.tv_usec-lostAtTime.tv_usec+1000000 * (timeTest.tv_sec - lostAtTime.tv_sec))*1e-6;
 	  //printf("lost: frFound: %d, frLost:%d\n",frFound, frLost);
-	  if(dt > .5){
+	  if(dt > .1){
 	    if(servoArgs.angle<60){
 	      if(frFound < 5 && frLost > 3){
-	      servoArgs.angle += 30;
+	      servoArgs.angle += 10;
 	      printf("servo incrment Angle: %d\n",servoArgs.angle);
 	      }
 	    }
