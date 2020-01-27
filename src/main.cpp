@@ -578,7 +578,7 @@ int main(int argc, const char* argv[]){
 
 	
 	//deltaGyro = gyroAngle - prevGyro;
-	driveAngle = positionAV.angle+(-gyroAngle)+readServoAngle+(-positionAV.angle2); // calculate the needed position for the turn
+	driveAngle = positionAV.angle+(-gyroAngle)+(-readServoAngle)+(-positionAV.angle2); // calculate the needed position for the turn
 	//prevGyro = gyroAngle;
 
 	// set PID args to send to server;
@@ -602,7 +602,7 @@ int main(int argc, const char* argv[]){
 	printf("angles: alpha: %4.2f, alpha2: %4.2f, readServoAngle: %d, gyro: %4.2f\n",positionAV.angle,positionAV.angle2,readServoAngle,gyroAngle);
 
 	if(buttonPress == 1){
-	  setServoAngle = (int) positionAV.angle; 
+	  setServoAngle = (int) -positionAV.angle + readServoAngle; 
 	  move = true;
 	}
 
@@ -646,11 +646,11 @@ int main(int argc, const char* argv[]){
 	  gettimeofday(&timeTest,NULL);
 	  double dt = (timeTest.tv_usec-lostAtTime.tv_usec+1000000 * (timeTest.tv_sec - lostAtTime.tv_sec))*1e-6;
 	  printf("lost: frFound: %d, frLost:%d\n",frFound, frLost);
-	  if(dt > .1){
+	  if(dt > .5){
 	    if(readServoAngle<60){
 	      if(frFound < 5 && frLost > 3){
-		setServoAngle+=10;
-		printf("servo incrment Angle: %d\n",setServoAngle);
+		setServoAngle = readServoAngle + 20;
+		printf("servo incrment Angle: %d -> %d\n",readServoAngle,setServoAngle);
 	      }
 	    }
 	    else
