@@ -87,6 +87,7 @@ int videoPort;
 int videoError = 0;
 float gyroAngle = 0;
 float driveAngle = 0;
+double alphaGlobal = 0;
 
 Targets *tLeft;
 Targets *tRight;
@@ -285,8 +286,8 @@ bool setAngle(int angle){
     angle=90;
   if(angle<-90)
     angle=-90;
-  angle = angle/90. * 350;
-  angle += 350;//350 = centered                                                                                     
+  angle = angle * (1000./240.);
+  angle += 375;//350 = centered                                                                                     
   int16_t sendAngle = (int) angle;
   //printf("buffer sending: %d\n",sendAngle);
   length = sizeof(sendAngle);
@@ -300,24 +301,24 @@ int16_t readAngle(){
   length = sizeof(int16_t);
   if (write(file_i2c, &i, length) != length)
     printf("Failed to write to the i2c bus.\n");
-  usleep(50*1000);
+  usleep(50*1000); // write -1 not send to servo -> i2c ~300 us + wait time
   unsigned char buf[32];
   int16_t angle;
   length = 2;
   if (read(file_i2c,buf, length) != length)
     printf("Failed to read from the i2c bus.\n");
   angle = buf[0] | buf[1]<<8;
-  angle -= 350;//350 = centered                                                                                     
-  angle = angle/350. * 90;
+  angle -= 375;//350 = centered                                                                                     
+  angle = angle * (240./1000.);
   printf("read angle: %d\n",angle);
-  return angle;//check for returning of 63 degrees or 597 in their system                                           
+  return angle;//check for returning of 53 degrees or 597 in their system                                           
 }
 void* moveServo(void *arg){
   while(true){
     setAngle(setServoAngle);
     usleep(20*1000);
     int readTest = readAngle();
-    if(readTest != 63)
+    if(readTest != 53)
       readServoAngle = readTest;
     usleep(20*1000);
   }
@@ -336,6 +337,14 @@ void* movePID(void* arg){
     if(told.tv_sec==0)
       dt = 0.1;
     turnLoc = 0;
+    
+    if(buttonPress == 1){
+      setServoAngle = (int) -alphaGlobal + readServoAngle;
+      //if(position.dist < 150)
+      //setServoAngle = 0;
+      move = true;
+    }
+    
     drivePID->button(buttonPress);
     turnLoc = drivePID->calculate(driveAngle,-gyroAngle,dt,&P,&I,&D);
     turn = turnLoc;
@@ -470,7 +479,7 @@ int main(int argc, const char* argv[]){
     return false;
   }
 
-
+  gettimeofday(&lostAtTime,NULL);
   /*  int angle = 0;
   int rAngle = 0;
   
@@ -576,9 +585,9 @@ int main(int argc, const char* argv[]){
 
 	//====UPDATES====
 
-	
+	alphaGlobal = positionAV.angle;
 	//deltaGyro = gyroAngle - prevGyro;
-	driveAngle = positionAV.angle+(-gyroAngle)+(-readServoAngle)+(-positionAV.angle2); // calculate the needed position for the turn
+	driveAngle = positionAV.angle+(-gyroAngle)+(-readServoAngle);//+(-positionAV.angle2); // calculate the needed position for the turn
 	//prevGyro = gyroAngle;
 
 	// set PID args to send to server;
@@ -600,11 +609,14 @@ int main(int argc, const char* argv[]){
         */
 
 	printf("angles: alpha: %4.2f, alpha2: %4.2f, readServoAngle: %d, gyro: %4.2f\n",positionAV.angle,positionAV.angle2,readServoAngle,gyroAngle);
-
+	/*
 	if(buttonPress == 1){
-	  setServoAngle = (int) -positionAV.angle + readServoAngle; 
+	  setServoAngle = (int) -positionAV.angle + readServoAngle;
+	  if(position.dist < 150)
+	    setServoAngle = 0;
 	  move = true;
 	}
+	*/
 
 	
 	if(qdebug > 4){
@@ -617,14 +629,17 @@ int main(int argc, const char* argv[]){
 	  if(frFound >= 5){
 	    frLost = 0;
 	    frFound = 6;
-	    resetCam = false;
+	    //resetCam = false;
 	  }
 	}
+	
 	printf("found: frFound: %d, frLost:%d\n",frFound, frLost);
       }else{
 	nullifyStruct(positionAV);
 	positionAV.z=-1;
 	if(switches.TURNCAM){
+	  
+	  /*
 	  if(resetCam){
 	    resetCam = false;
 	    printf("\ncam reset\n\n");
@@ -632,8 +647,9 @@ int main(int argc, const char* argv[]){
 	    usleep(1000*1000);
 	    gettimeofday(&lostAtTime,NULL);
 	  }
+	  */
 	  if(frLost >= 15 && frFound >= 5){
-	    resetCam = true;
+	    //resetCam = true;
 	    frFound = 0;
 	    frLost = 0;
 	  }
@@ -641,13 +657,20 @@ int main(int argc, const char* argv[]){
 	    frFound = 0;
 	    frLost = 21;
 	  }
+	  
 	  frLost++;
 	  missFR++;
 	  gettimeofday(&timeTest,NULL);
 	  double dt = (timeTest.tv_usec-lostAtTime.tv_usec+1000000 * (timeTest.tv_sec - lostAtTime.tv_sec))*1e-6;
 	  printf("lost: frFound: %d, frLost:%d\n",frFound, frLost);
-	  if(dt > .5){
-	    if(readServoAngle<60){
+	  printf("resetCam : %d, %.2f\n",resetCam,dt);
+	  if(readServoAngle < -80)
+	    resetCam = true;
+	  else if(readServoAngle > 80)
+	    resetCam = false;
+	  if(dt > .1){
+	    /*
+	    if(readServoAngle<85){
 	      if(frFound < 5 && frLost > 3){
 		setServoAngle = readServoAngle + 20;
 		printf("servo incrment Angle: %d -> %d\n",readServoAngle,setServoAngle);
@@ -655,7 +678,14 @@ int main(int argc, const char* argv[]){
 	    }
 	    else
 	      resetCam = true;
-	    gettimeofday(&lostAtTime,NULL);
+	    */
+	    if(frFound < 5 && frLost > 3){
+	      if(resetCam)
+		setServoAngle = readServoAngle + 10;
+	      else
+		setServoAngle = readServoAngle - 10;
+	      gettimeofday(&lostAtTime,NULL);
+	    }
 	  }
 	}
       }
