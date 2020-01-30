@@ -20,7 +20,6 @@ using namespace cv;
 #define MAXTARGETS 20
 #define ASIZE 10
 
-int buttonPress;
 
 //Editable
 double MinRatio = 0.1;
@@ -64,16 +63,25 @@ double FrameHeight;
 //threads
 pthread_t MJPEG;
 void* VideoCap(void* arg);
+
 pthread_t tcpserver;
 void* opentcp(void* arg);
+
 pthread_t moveServoThread;
 void* moveServo(void* arg);
+
 pthread_t videoServerThread;
 void* videoServer(void* arg);
+
 pthread_t USBSlaveThread;
 void* USBSlave(void* arg);
+
 pthread_t PIDThread;
 void* movePID(void* arg);
+
+pthread_t DriveThread;
+void* drive(void* arg);
+
 pthread_mutex_t frameMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t targetMutex = PTHREAD_MUTEX_INITIALIZER;
 Mat frame;
@@ -85,9 +93,12 @@ const Scalar BLUE = Scalar(255, 0, 0), RED = Scalar(0,0,255), YELLOW = Scalar(0,
 int remoteSocket = 0;
 int videoPort;
 int videoError = 0;
-float gyroAngle = 0;
-float driveAngle = 0;
+double gyroAngle = 0;
+double driveAngle = 0;
 double alphaGlobal = 0;
+bool updated;
+int buttonPress;
+
 
 Targets *tLeft;
 Targets *tRight;
@@ -324,11 +335,50 @@ void* moveServo(void *arg){
   }
 }
 
+void* drive(void* arg){
+  Position* pos = (Position*) arg;
+  bool init = true;
+  while(true){
+    if(buttonPress == 0)
+      init = true;
+    if(buttonPress == 1 && init){//initialize loop when first button pressed;
+      init = false;
+    }
+
+    
+    if(buttonPress == 1){
+      //setServoAngle = (int) -alphaGlobal + readServoAngle;
+      setServoAngle = 0;
+    }
+    if(pos->dist>75 && buttonPress == 1)
+      pos->speed = 0.5;//0.25
+    else
+      pos->speed = 0.0;
+    
+    
+    if(updated){
+      driveAngle = alphaGlobal+(-gyroAngle)+(-readServoAngle);//+(-pos->angle2); // calculate the needed position for the turn
+      printf("drive: driveAngle %.2f; alpha %.2f; -gyro %.2f; -servo %d\n",driveAngle,alphaGlobal,-gyroAngle,-readServoAngle);
+      updated = false;
+    } else {
+      if(abs(driveAngle-(-gyroAngle)) < 10){
+	pos->turn = 0.0;
+	move = false;
+      } else {
+	pos->turn = turn;
+	move = true;
+      }
+    }
+    
+    usleep(50);
+  }
+}
+
 void* movePID(void* arg){
   PID* drivePID;
   struct timeval tnew, told;
   double turnLoc, dt;
-  drivePID = new PID(0.0,1,-1, 0.01,0.001,0.007); // 0.007 // 0 // 0.008
+  drivePID = new PID(0.0,1,-1, 0.017,0.001,0.0); // 0.01 // 0.001 // 0.007
   
   while(true){
     gettimeofday(&tnew,NULL);
@@ -337,13 +387,6 @@ void* movePID(void* arg){
     if(told.tv_sec==0)
       dt = 0.1;
     turnLoc = 0;
-    
-    if(buttonPress == 1){
-      setServoAngle = (int) -alphaGlobal + readServoAngle;
-      //if(position.dist < 150)
-      //setServoAngle = 0;
-      move = true;
-    }
     
     drivePID->button(buttonPress);
     turnLoc = drivePID->calculate(driveAngle,-gyroAngle,dt,&P,&I,&D);
@@ -390,7 +433,6 @@ inline void nullifyStruct(Position &pos){
   pos.P=0;
   pos.I=0;
   pos.D=0;
-  
 }
 void* USBSlave(void* arg){
   printf("enter gyro slave\n");
@@ -480,24 +522,6 @@ int main(int argc, const char* argv[]){
   }
 
   gettimeofday(&lostAtTime,NULL);
-  /*  int angle = 0;
-  int rAngle = 0;
-  
-  if(argc>1)
-    angle = atoi(argv[1]);
-  printf("angle= %d\n",angle);
-  while(true){
-    angle = rand() % 180 - 90;
-    //std::cin >> angle;                                                                                            
-    setAngle(angle);
-    while(abs(rAngle-angle)>1){
-      usleep(10*1000);
-      rAngle = readAngle();
-      if(rAngle != 63)
-        printf("read: %d\n",rAngle);
-    }
-  }
-  */
   
   Mat img, HSV, thresholded, output;
   bool resetCam = true;
@@ -519,6 +543,7 @@ int main(int argc, const char* argv[]){
   pthread_create(&MJPEG, NULL, VideoCap, NULL);
   pthread_create(&USBSlaveThread, NULL, USBSlave,NULL);
   pthread_create(&PIDThread, NULL, movePID, NULL);
+  pthread_create(&DriveThread, NULL, drive, &positionAV);
   int rc = pthread_setname_np(MJPEG, "MJPEG Thread");
   if (rc != 0)
     printf("MJPEG thread fail%d\n",rc);
@@ -553,9 +578,9 @@ int main(int argc, const char* argv[]){
       pthread_mutex_lock(&targetMutex);
       int nt = findTarget(img, thresholded, targets);
       nullifyStruct(position);
-      if (nt==2)
+      if (nt==2){
 	findAnglePnP(img,tLeft,tRight,&position);
-      if (nt==2) {
+	updated = true;
 	//put latest values into avaraging struct, delete old one.
 	posA.push_back(position);
 	if(posA.size()>ASIZE)
@@ -587,20 +612,20 @@ int main(int argc, const char* argv[]){
 
 	alphaGlobal = positionAV.angle;
 	//deltaGyro = gyroAngle - prevGyro;
-	driveAngle = positionAV.angle+(-gyroAngle)+(-readServoAngle);//+(-positionAV.angle2); // calculate the needed position for the turn
+	//driveAngle = alphaGlobal+(-gyroAngle)+(-readServoAngle);//+(-positionAV.angle2); // calculate the needed position for the turn
 	//prevGyro = gyroAngle;
 
 	// set PID args to send to server;
 	positionAV.P=P;
 	positionAV.I=I;
 	positionAV.D=D;
-	positionAV.turn = turn;
+	//positionAV.turn = turn;
 
 
 	// set speed to constant (any values above 0.0 works) iff the target is within 200 && -200 bounds, and the distance to target is >65cm
 	//                       (since the robot calculates the speed based on turn by its self)
-	if(position.dist>65 && buttonPress == 1)
-	  positionAV.speed=0.5;//0.25
+	//if(position.dist>65 && buttonPress == 1)
+	//positionAV.speed=0.5;//0.25
 
 	/*
 	if(abs(positionAV.angle)>10){
@@ -635,7 +660,7 @@ int main(int argc, const char* argv[]){
 	
 	printf("found: frFound: %d, frLost:%d\n",frFound, frLost);
       }else{
-	nullifyStruct(positionAV);
+	//nullifyStruct(positionAV);
 	positionAV.z=-1;
 	if(switches.TURNCAM){
 	  

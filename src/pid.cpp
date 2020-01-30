@@ -52,13 +52,13 @@ double PID::calculate( double setpoint, double pv ,double dt, double* P, double*
 
   // Calculate total output
   double output = Pout + Iout + Dout;
-  printf("fix-gyro:%6.2f, %6.2f, errorPID: %6.2f, Pout: %6.2f, Iout: %6.2f, Dout:%6.2f, output: %6.2f\n",setpoint,pv,error,Pout,Iout,Dout,output);
   if(abs(Pout) > 1.2)
     Pout = copysign(1.2,Pout);
   if(abs(Iout) > 1.2)
-    Iout = copysign(1.0,Iout);
+    Iout = copysign(1.2,Iout);
   if(abs(Dout) > 1.2)
     Dout = copysign(1.2,Dout);
+  printf("fix-gyro:%6.2f, %6.2f, errorPID: %6.2f, Pout: %6.2f, Iout: %6.2f, Dout:%6.2f, output: %6.2f\n",setpoint,pv,error,Pout,Iout,Dout,output);
     
   *P=Pout;
   *I=Iout;
