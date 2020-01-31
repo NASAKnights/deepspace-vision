@@ -111,6 +111,24 @@ double P, I, D;
 double turn;
 bool move;
 
+
+class Clock{
+public:
+  struct timeval time1, time2;
+  Clock(){
+    gettimeofday(&time1,NULL);
+  }
+  void restart(){
+    gettimeofday(&time1,NULL);
+  }
+  double getTimeAsMillis(){
+    gettimeofday(&time2,NULL);
+    return (time2.tv_usec-time1.tv_usec+1000000 * (time2.tv_sec - time1.tv_sec))*0.001;
+  }
+
+};
+
+
 //FUNCTIONS----------------------------------------------------------------------
 void on_trackbar(int, void*)
 {
@@ -336,15 +354,18 @@ void* moveServo(void *arg){
   }
 }
 
+
 void* drive(void* arg){
   Position* pos = (Position*) arg;
   bool init = true;
   double angle2Local;
+  Clock clock1;
   while(true){
     if(buttonPress == 0)
       init = true;
-    if(buttonPress == 1 && init){//initialize loop when first button pressed;
+    if(buttonPress == 1 && init){ //initialize loop when first button pressed;
       init = false;
+      clock1.restart();
     }
 
 
@@ -352,29 +373,65 @@ void* drive(void* arg){
       pthread_mutex_lock(&targetMutex);
       angle2Local = pos->angle2;
       pthread_mutex_unlock(&targetMutex);
-    }    
+      //if(buttonPress == 1)
+      //setServoAngle = readServoAngle - alphaGlobal;
+    } else {
+      //if(buttonPress == 1)
+      //setServoAngle = 0;
+    }
+    if(buttonPress == 1){
+      if(clock1.getTimeAsMillis() > 500)
+	setServoAngle = 0;
+      //printf("dtdrive: %.2f\n",clock1.getTimeAsMillis());
+    }
+
+    /*
     if(buttonPress == 1){
       //setServoAngle = (int) -alphaGlobal + readServoAngle;
       setServoAngle = -angle2Local;
     }
-    if(pos->dist>75 && buttonPress == 1)
+    */
+    /*
+    if(pos->dist>75 && buttonPress == 1){
       pos->speed = 0.5;//0.25
-    else
+    }else{
       pos->speed = 0.0;
+    }
+    */
     
+    if(pos->dist>75 && buttonPress == 1){
+      //pos->speed = 0.5;//0.25
+      double maxSpeed = 0.5;
+      double speed = (1-sqrt(abs(turn))) * maxSpeed;
+      pos->speed = (1-turn) * maxSpeed - maxSpeed + speed; //power L
+      pos->turn = turn * maxSpeed + speed; // power R
+      printf("turnval: %.2f, speedval: %.2f, speed(L) : %.2f, turn(R): %.2f\n",turn,speed, pos->speed,pos->turn);
+    }else{
+      pos->speed = 0.0;
+      pos->turn = 0.0;
+    }
     
     if(updated){
-      driveAngle = alphaGlobal+(-gyroAngle)+(-readServoAngle)+(-angle2Local*1.5); // calculate the needed position for the turn
+      if(buttonPress == 0)
+	driveAngle = alphaGlobal+(-gyroAngle)+(-readServoAngle);//+(-angle2Local*1.5); // calculate the needed position for the turn
+      else{
+	if(clock1.getTimeAsMillis() > 500)
+	  driveAngle = alphaGlobal+(-gyroAngle)+(-readServoAngle);//+(-angle2Local*1.5); // calculate the needed position for the turn
+      }
       printf("drive: driveAngle %.2f; alpha %.2f; -gyro %.2f; -servo %d; -alpha2 %.2f\n",driveAngle,alphaGlobal,-gyroAngle,-readServoAngle,-angle2Local);
       updated = false;
     } else {
+      //move = (abs(driveAngle-(-gyroAngle)) < 10) ? false : true;
+      move = (pos->dist > 75) ? true : false;
+      /*
       if(abs(driveAngle-(-gyroAngle)) < 10){
-	pos->turn = 0.0;
+	turn = 0.0;
 	move = false;
       } else {
-	pos->turn = turn;
+	//turn = turn;
 	move = true;
       }
+      */
     }
     
     usleep(50);
