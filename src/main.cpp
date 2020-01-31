@@ -18,7 +18,7 @@ using namespace cv;
 
 
 #define MAXTARGETS 20
-#define ASIZE 10
+#define ASIZE 5
 
 
 //Editable
@@ -347,10 +347,12 @@ void* moveServo(void *arg){
   while(true){
     setAngle(setServoAngle);
     usleep(20*1000);
+    
     int readTest = readAngle();
     if(readTest != 53)
       readServoAngle = readTest;
     usleep(20*1000);
+    
   }
 }
 
@@ -360,6 +362,7 @@ void* drive(void* arg){
   bool init = true;
   double angle2Local;
   Clock clock1;
+  int counting = 0;
   while(true){
     if(buttonPress == 0)
       init = true;
@@ -367,37 +370,16 @@ void* drive(void* arg){
       init = false;
       clock1.restart();
     }
-
-
     if(updated){
       pthread_mutex_lock(&targetMutex);
       angle2Local = pos->angle2;
       pthread_mutex_unlock(&targetMutex);
-      //if(buttonPress == 1)
-      //setServoAngle = readServoAngle - alphaGlobal;
-    } else {
-      //if(buttonPress == 1)
+    }
+    if(buttonPress == 1){
+      //if(clock1.getTimeAsMillis() > 500)
       //setServoAngle = 0;
-    }
-    if(buttonPress == 1){
-      if(clock1.getTimeAsMillis() > 500)
-	setServoAngle = 0;
-      //printf("dtdrive: %.2f\n",clock1.getTimeAsMillis());
-    }
-
-    /*
-    if(buttonPress == 1){
-      //setServoAngle = (int) -alphaGlobal + readServoAngle;
       setServoAngle = -angle2Local;
     }
-    */
-    /*
-    if(pos->dist>75 && buttonPress == 1){
-      pos->speed = 0.5;//0.25
-    }else{
-      pos->speed = 0.0;
-    }
-    */
     
     if(pos->dist>75 && buttonPress == 1){
       //pos->speed = 0.5;//0.25
@@ -412,17 +394,16 @@ void* drive(void* arg){
     }
     
     if(updated){
-      if(buttonPress == 0)
-	driveAngle = alphaGlobal+(-gyroAngle)+(-readServoAngle);//+(-angle2Local*1.5); // calculate the needed position for the turn
-      else{
-	if(clock1.getTimeAsMillis() > 500)
-	  driveAngle = alphaGlobal+(-gyroAngle)+(-readServoAngle);//+(-angle2Local*1.5); // calculate the needed position for the turn
-      }
-      printf("drive: driveAngle %.2f; alpha %.2f; -gyro %.2f; -servo %d; -alpha2 %.2f\n",driveAngle,alphaGlobal,-gyroAngle,-readServoAngle,-angle2Local);
+      //if(buttonPress == 0)
+      driveAngle = alphaGlobal+(-gyroAngle)+(-readServoAngle)+(-angle2Local); // calculate the needed position for the turn
+      //else{
+	//if(clock1.getTimeAsMillis() > 500)
+	//  driveAngle = alphaGlobal+(-gyroAngle)+(-readServoAngle);//+(-angle2Local); // calculate the needed position for the turn
+      //}
+      printf("\n\nUPDATED\n\n");
       updated = false;
     } else {
       //move = (abs(driveAngle-(-gyroAngle)) < 10) ? false : true;
-      move = (pos->dist > 75) ? true : false;
       /*
       if(abs(driveAngle-(-gyroAngle)) < 10){
 	turn = 0.0;
@@ -432,8 +413,17 @@ void* drive(void* arg){
 	move = true;
       }
       */
+      
     }
-    
+    move = (pos->dist > 75) ? true : false;
+
+    counting++;
+    if(counting % 50 == 0){
+      if(clock1.getTimeAsMillis() < 500) printf("sleeping\n");    
+      printf("drive: driveAngle %.2f : -gyro %.2f; alpha %.2f; -servo %d; -alpha2 %.2f  ",driveAngle,-gyroAngle,alphaGlobal,-readServoAngle,-angle2Local);
+      printf("counter: %d\n",counting);
+      
+    }
     usleep(50);
   }
 }
@@ -644,7 +634,6 @@ int main(int argc, const char* argv[]){
       nullifyStruct(position);
       if (nt==2){
 	findAnglePnP(img,tLeft,tRight,&position);
-	updated = true;
 	//put latest values into avaraging struct, delete old one.
 
 	posA.push_back(position);
@@ -706,6 +695,7 @@ int main(int argc, const char* argv[]){
 	  move = true;
 	}
 	*/
+	updated = true;
 
 	
 	if(qdebug > 4){
