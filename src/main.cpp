@@ -84,6 +84,7 @@ void* drive(void* arg);
 
 pthread_mutex_t frameMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t targetMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t positionMutex = PTHREAD_MUTEX_INITIALIZER;
 Mat frame;
 
 const std::string trackbarWindowName = "Trackbars";
@@ -338,6 +339,7 @@ void* moveServo(void *arg){
 void* drive(void* arg){
   Position* pos = (Position*) arg;
   bool init = true;
+  double angle2Local;
   while(true){
     if(buttonPress == 0)
       init = true;
@@ -345,10 +347,15 @@ void* drive(void* arg){
       init = false;
     }
 
-    
+
+    if(updated){
+      pthread_mutex_lock(&targetMutex);
+      angle2Local = pos->angle2;
+      pthread_mutex_unlock(&targetMutex);
+    }    
     if(buttonPress == 1){
       //setServoAngle = (int) -alphaGlobal + readServoAngle;
-      setServoAngle = 0;
+      setServoAngle = -angle2Local;
     }
     if(pos->dist>75 && buttonPress == 1)
       pos->speed = 0.5;//0.25
@@ -357,8 +364,8 @@ void* drive(void* arg){
     
     
     if(updated){
-      driveAngle = alphaGlobal+(-gyroAngle)+(-readServoAngle);//+(-pos->angle2); // calculate the needed position for the turn
-      printf("drive: driveAngle %.2f; alpha %.2f; -gyro %.2f; -servo %d\n",driveAngle,alphaGlobal,-gyroAngle,-readServoAngle);
+      driveAngle = alphaGlobal+(-gyroAngle)+(-readServoAngle)+(-angle2Local*1.5); // calculate the needed position for the turn
+      printf("drive: driveAngle %.2f; alpha %.2f; -gyro %.2f; -servo %d; -alpha2 %.2f\n",driveAngle,alphaGlobal,-gyroAngle,-readServoAngle,-angle2Local);
       updated = false;
     } else {
       if(abs(driveAngle-(-gyroAngle)) < 10){
@@ -582,10 +589,11 @@ int main(int argc, const char* argv[]){
 	findAnglePnP(img,tLeft,tRight,&position);
 	updated = true;
 	//put latest values into avaraging struct, delete old one.
+
 	posA.push_back(position);
 	if(posA.size()>ASIZE)
 	  posA.erase(posA.begin());
-	
+	//MUTEX HERE
 	//resetting avarage struct
 	nullifyStruct(positionAV);
 	
@@ -596,8 +604,7 @@ int main(int argc, const char* argv[]){
 	  positionAV.angle+=(*it).angle;
 	  positionAV.angle2+=(*it).angle2;
 	  positionAV.dist+=(*it).dist;
-	  positionAV.OffSetx+=(*it).OffSetx;
-	      
+	  positionAV.OffSetx+=(*it).OffSetx;	      
 	}
 	positionAV.x/=posA.size();
 	positionAV.z/=posA.size();

@@ -189,12 +189,13 @@ void findAnglePnP(cv::Mat im, Targets *tLeft, Targets *tRight,Position* position
   cv::Mat xWorldd = -rMat.t()*tvec;
   double* xWorld = xWorldd.ptr<double>();
   double angle2 = atan2(xWorld[0],-xWorld[2]);
+
   cv::Point2d tc((tLeft->center.x+tRight->center.x)/2.,(tLeft->center.y+tRight->center.y)/2.);
   position->x=sin(angle2)*distance;
   position->z=cos(angle2)*distance;
   position->dist=distance;
-  position->angle=angle*180/3.141592;
-  position->angle2=angle2*180/3.141592;
+  position->angle=angle*(180/3.141592);
+  position->angle2=angle2*(180/3.141592);
   position->OffSetx=tc.x-center.x;
 
   
