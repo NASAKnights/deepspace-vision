@@ -5,7 +5,7 @@
 #include <linux/i2c-dev.h>
 #include <cstdint>
 #include <fcntl.h>
-
+ 
 using namespace cv;
 /*
   removed old math
@@ -18,7 +18,7 @@ using namespace cv;
 
 
 #define MAXTARGETS 20
-#define ASIZE 5
+#define ASIZE 10
 
 
 //Editable
@@ -378,6 +378,7 @@ void* drive(void* arg){
     if(buttonPress == 1){
       //if(clock1.getTimeAsMillis() > 500)
       //setServoAngle = 0;
+
       setServoAngle = -angle2Local;
     }
     
@@ -396,6 +397,7 @@ void* drive(void* arg){
     if(updated){
       //if(buttonPress == 0)
       driveAngle = alphaGlobal+(-gyroAngle)+(-readServoAngle)+(-angle2Local); // calculate the needed position for the turn
+	
       //else{
 	//if(clock1.getTimeAsMillis() > 500)
 	//  driveAngle = alphaGlobal+(-gyroAngle)+(-readServoAngle);//+(-angle2Local); // calculate the needed position for the turn
@@ -635,29 +637,33 @@ int main(int argc, const char* argv[]){
       if (nt==2){
 	findAnglePnP(img,tLeft,tRight,&position);
 	//put latest values into avaraging struct, delete old one.
-
+	
 	posA.push_back(position);
 	if(posA.size()>ASIZE)
 	  posA.erase(posA.begin());
 	//MUTEX HERE
 	//resetting avarage struct
 	nullifyStruct(positionAV);
-	
-	for(it = posA.begin(); it != posA.end(); it++){
+	int cntr = 0;
+	for(it = posA.end()-5; it != posA.end(); it++){
+	  cntr++;
 	  //std::cout<< i << ": x = " << (*it).x << std::endl;
 	  positionAV.x+=(*it).x;
 	  positionAV.z+=(*it).z;
 	  positionAV.angle+=(*it).angle;
-	  positionAV.angle2+=(*it).angle2;
+	  //positionAV.angle2+=(*it).angle2;
 	  positionAV.dist+=(*it).dist;
 	  positionAV.OffSetx+=(*it).OffSetx;	      
 	}
-	positionAV.x/=posA.size();
-	positionAV.z/=posA.size();
-	positionAV.angle/=posA.size();
+	for(it = posA.begin(); it != posA.end(); it++){
+	  positionAV.angle2+=(*it).angle2;
+	}
+	positionAV.x/=cntr;
+	positionAV.z/=cntr;
+	positionAV.angle/=cntr;
 	positionAV.angle2/=posA.size();
-	positionAV.dist/=posA.size();
-	positionAV.OffSetx/=posA.size();
+	positionAV.dist/=cntr;
+	positionAV.OffSetx/=cntr;
 	positionAV.gyro=gyroAngle;
 
 
