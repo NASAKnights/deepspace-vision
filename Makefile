@@ -11,7 +11,7 @@ endif
 ifeq  ($(shell uname -m),armv7l)
     INCS = -I src -I ~/LIBS/opencv40/include/opencv4
     PLIBS = ~/LIBS/opencv40/lib/
-    PLATFORM = RPI
+    PLATFORM = RPID
 endif
 ifeq  ($(shell uname -m),x86_64)
     INCS = -I src -I ~/LIBS/opencv40/include
@@ -24,7 +24,7 @@ PLIBS = /home/denis/LIBS/opencv40/lib/
 
 LIBS = -L $(PLIBS) -lopencv_core -lopencv_ml -lopencv_calib3d -lopencv_videoio -lopencv_imgcodecs -lopencv_highgui  -lopencv_imgproc -lpthread -lpigpio
 
-all:  main 
+all:  target 
 
 INCDIR=src acceptImage
 SRCDIR=src acceptImage
@@ -42,9 +42,17 @@ vpath           %.cpp $(SRCDIR)
 .cpp.o:
 	$(CC) $(CFLAGS)  ${INCS} -c $<  
 
-MAIN_OBJ = main.o tcp_thread.o opencvPnP.o server.o videoserver.o pid.o
-main:   ${MAIN_OBJ} src/servoController.h
-	${CC} ${CFLAGS} ${INCS} -o $@.exe ${MAIN_OBJ}  ${LIBS}
+auto19_OBJ = auto19.o tcp_thread.o opencvPnP.o server.o videoserver.o pid.o
+auto19:   ${auto19_OBJ} src/servoController.h
+	${CC} ${CFLAGS} ${INCS} -o $@.exe ${auto19_OBJ}  ${LIBS}
+	@echo "export LD_LIBRARY_PATH=$(PLIBS)" > env.sh
+	@echo "stty -F /dev/ttyUSB0 115200" >> env.sh
+	@echo "stty -F /dev/ttyUSB0 -hupcl" >> env.sh
+	@echo "stty -F /dev/ttyUSB1 115200" >> env.sh
+
+target_OBJ = target.o tcp_thread.o opencvPnP.o server.o videoserver.o pid.o
+target:   ${target_OBJ}
+	${CC} ${CFLAGS} ${INCS} -o $@.exe ${target_OBJ}  ${LIBS}
 	@echo "export LD_LIBRARY_PATH=$(PLIBS)" > env.sh
 	@echo "stty -F /dev/ttyUSB0 115200" >> env.sh
 	@echo "stty -F /dev/ttyUSB0 -hupcl" >> env.sh
