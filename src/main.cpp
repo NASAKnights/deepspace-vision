@@ -384,7 +384,7 @@ void* drive(void* arg){
     
     if(pos->dist>75 && buttonPress == 1){
       //pos->speed = 0.5;//0.25
-      double maxSpeed = 0.5;
+      double maxSpeed = 0.8;
       double speed = (1-sqrt(abs(turn))) * maxSpeed;
       pos->speed = (1-turn) * maxSpeed - maxSpeed + speed; //power L
       pos->turn = turn * maxSpeed + speed; // power R
@@ -434,7 +434,7 @@ void* movePID(void* arg){
   PID* drivePID;
   struct timeval tnew, told;
   double turnLoc, dt;
-  drivePID = new PID(0.0,1,-1, 0.017,0.001,0.0); // 0.01 // 0.001 // 0.007
+  drivePID = new PID(0.0,1,-1, 0.017,0.005,0.0); // 0.01 // 0.001 // 0.007
   
   while(true){
     gettimeofday(&tnew,NULL);
@@ -645,7 +645,7 @@ int main(int argc, const char* argv[]){
 	//resetting avarage struct
 	nullifyStruct(positionAV);
 	int cntr = 0;
-	for(it = posA.end()-5; it != posA.end(); it++){
+	for(it = posA.end()-3; it != posA.end(); it++){
 	  cntr++;
 	  //std::cout<< i << ": x = " << (*it).x << std::endl;
 	  positionAV.x+=(*it).x;
