@@ -17,7 +17,7 @@ using namespace cv;
 
 
 
-#define MAXTARGETS 20
+#define MAXTARGETS 50
 #define ASIZE 10
 
 
@@ -26,9 +26,9 @@ double MinRatio = 0.1;
 double MaxRatio = 0.65;
 int MaxDiff = 1000;
 //colors
-int minH = 0;
+int minH = 81;
 int maxH = 255;
-int minS = 0;
+int minS = 41;
 int maxS = 255; // 5 without filter
 int minV = 219;
 int maxV = 241;
@@ -175,24 +175,31 @@ int findTarget(Mat original, Mat thresholded, Targets *targets)
   findContours(thresholded, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
 
   //------------- preselect by perimetr ------------------
+  /*
   for (std::vector<std::vector<Point> >::iterator it = contours.begin(); it != contours.end();){
     if (it->size() < 10){//min contour
       it = contours.erase(it);
-      if (qdebug>4) std::cout << "erased" << std::endl;
+      //if (qdebug>4)
+	std::cout << "erased" << std::endl;
     } else
       ++it;
   }
+  */
 
   //-------------- select by number of contours ------------
 
   int ntargets=0;
+  
   if (contours.size() > MAXTARGETS ) {
-    if (qdebug>2) std::cout <<  " too many targets found = " << contours.size() << std::endl;
+    //if (qdebug>2)
+      std::cout <<  " too many targets found = " << contours.size() << std::endl;
     return -1;
-  } else if (2 > contours.size() ){
-    if (qdebug>2) std::cout << "too little targets found" << std::endl;
+  } else if (1 > contours.size() ){
+    //if (qdebug>2)
+      std::cout << "too little targets found" << std::endl;
     return -1;
   }
+  
   //--------------------------------------------------------
 
   std::vector<RotatedRect> minRect(contours.size());
@@ -202,11 +209,12 @@ int findTarget(Mat original, Mat thresholded, Targets *targets)
 
     for (int i = 0; i < (int) contours.size(); i++){
       targets[i].NullTargets();
-      if (hierarchy[i][2]!=-1) {if (qdebug>2) printf("failed hierarchy\n"); continue;}
+      //if (hierarchy[i][2]!=-1) {if (qdebug>2) printf("failed hierarchy\n"); continue;}
       minRect[i] = minAreaRect(Mat(contours[i]));
       cv::Point2f rect_points[4];
       minRect[i].points(rect_points);
       std::copy(rect_points,rect_points+4,targets[i].points);
+      /*
       if(qdebug>2)
 	std::cout<<*targets[i].points<<"\n";
       double w1 = sqrt(pow((rect_points[0].x-rect_points[1].x),2)+
@@ -220,6 +228,7 @@ int findTarget(Mat original, Mat thresholded, Targets *targets)
 
       double Width = (w1+w2)/2;
       double Height = (h1+h2)/2;
+      
       targets[i].height = Height;
       targets[i].width = Width;
       if (w1>h1){
@@ -228,18 +237,21 @@ int findTarget(Mat original, Mat thresholded, Targets *targets)
 	Width=targets[i].width;
 	Height=targets[i].height;
       }
+      */
 
-      double area =  Width * Height;
-      targets[i].area = area;
+      //double area =  Width * Height;
+      //targets[i].area = area;
 
       for (int j = 0; j < 4; j++) { 
-	line(original,rect_points[j], rect_points[(j + 1) % 4], BLUE, 1, 8);
+	line(original,rect_points[j], rect_points[(j + 1) % 4], RED, 1, 8);
+	printf("drawing line %d\n",j);
       }
+      /*
       Rect box = minRect[i].boundingRect();
       targets[i].found = "no";
       Point center(box.x + box.width / 2, box.y + box.height / 2);
       targets[i].center=center;
-
+      
       if(targets[i].center.y < 100)
 	continue;
       if(targets[i].center.y > 380)
@@ -287,6 +299,7 @@ int findTarget(Mat original, Mat thresholded, Targets *targets)
 
 
       } //---end contour loop k
+      */
     }//---end contour loop i
 
   }
@@ -421,9 +434,9 @@ void* drive(void* arg){
 
     counting++;
     if(counting % 50 == 0){
-      if(clock1.getTimeAsMillis() < 500) printf("sleeping\n");    
-      printf("drive: driveAngle %.2f : -gyro %.2f; alpha %.2f; -servo %d; -alpha2 %.2f  ",driveAngle,-gyroAngle,alphaGlobal,-readServoAngle,-angle2Local);
-      printf("counter: %d\n",counting);
+      //if(clock1.getTimeAsMillis() < 500) printf("sleeping\n");    
+      //printf("drive: driveAngle %.2f : -gyro %.2f; alpha %.2f; -servo %d; -alpha2 %.2f  ",driveAngle,-gyroAngle,alphaGlobal,-readServoAngle,-angle2Local);
+      //printf("counter: %d\n",counting);
       
     }
     usleep(50);
@@ -439,7 +452,7 @@ void* movePID(void* arg){
   while(true){
     gettimeofday(&tnew,NULL);
     dt = (tnew.tv_usec-told.tv_usec+1000000 * (tnew.tv_sec - told.tv_sec))*1e-6;
-    printf("dt: %.2f\n",dt);
+    //printf("dt: %.2f\n",dt);
     if(told.tv_sec==0)
       dt = 0.1;
     turnLoc = 0;
