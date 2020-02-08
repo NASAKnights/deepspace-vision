@@ -20,18 +20,19 @@ using namespace cv;
 #define MAXTARGETS 50
 #define ASIZE 10
 
+bool firstTimeTest = true;
 
 //Editable
 double MinRatio = 0.1;
 double MaxRatio = 0.65;
 int MaxDiff = 1000;
 //colors
-int minH = 81;
+int minH = 67;//81
 int maxH = 255;
-int minS = 41;
+int minS = 53;//41
 int maxS = 255; // 5 without filter
-int minV = 219;
-int maxV = 241;
+int minV = 143;
+int maxV = 255;
 //booleans
 struct Switches {
   bool SHOWORIG;
@@ -89,7 +90,7 @@ Mat frame;
 
 const std::string trackbarWindowName = "Trackbars";
 std::vector <Point>totalfound;
-const Scalar BLUE = Scalar(255, 0, 0), RED = Scalar(0,0,255), YELLOW = Scalar(0,255,255);
+const Scalar BLUE = Scalar(255, 0, 0), RED = Scalar(0,0,255), YELLOW = Scalar(0,255,255), GREEN = Scalar(0,255,0);
 
 int remoteSocket = 0;
 int videoPort;
@@ -110,6 +111,13 @@ int readServoAngle;
 double P, I, D;
 double turn;
 bool move;
+
+bool funcX (cv::Point2f p1, cv::Point2f p2){
+  return (p1.x<p2.x);
+}
+bool funcY (cv::Point2f p1, cv::Point2f p2){
+  return (p1.y<p2.y);
+}
 
 
 class Clock{
@@ -168,13 +176,77 @@ void createTrackbars()
 
 //--------------------------------------------------------------------------------
 
-int findTarget(Mat original, Mat thresholded, Targets *targets)
-{
+int findTarget(Mat original, Mat thresholded, Targets *targets){
+  Mat test;
   std::vector<Vec4i> hierarchy;
   std::vector<std::vector<Point> > contours;
-  findContours(thresholded, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+  //findContours(thresholded, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
 
-  //------------- preselect by perimetr ------------------
+  Mat dilateElement = getStructuringElement( MORPH_RECT,Size(3,3));
+  Mat erodeElement = getStructuringElement( MORPH_RECT,Size(3,3));
+  //erode(thresholded,thresholded,erodeElement);
+  //dilate(thresholded,thresholded,dilateElement);
+  
+  
+  std::vector<cv::Point2f> corners;
+  double qualityLevel = 0.05;
+  double minDistance = 10;
+  int blockSize = 3;
+  bool useHarisDetector = true;
+  double k = 0.04;//0.04
+  int maxCorners = 100;
+  //kernel = np.ones();
+  
+  //dilate(thresholded,thresholded,dilateElement);
+  //erode(thresholded,thresholded,erodeElement);
+  erode(thresholded,thresholded,erodeElement);
+  dilate(thresholded,thresholded,dilateElement);
+  GaussianBlur(thresholded,thresholded,Size(3,3),0);
+  cv::Canny(thresholded,thresholded,50,100,3); 
+  //dilate(thresholded,thresholded,dilateElement);
+  //erode(thresholded,thresholded,erodeElement);
+  
+  //blur(thresholded,thresholded,Size(2,2));
+  //blur(thresholded,thresholded,Size(3,3));
+  findContours(thresholded, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE);
+  std::vector<Vec2f> lines;
+  //HoughLinesP(thresholded,lines,1,3.141592/180,75,0,100);
+
+  //dilate(thresholded,thresholded,dilateElement);
+  //GaussianBlur(thresholded,thresholded,Size(3,3),0);
+
+  HoughLines(thresholded,lines,1,3.141592/180,65,0,0);
+  //cv::goodFeaturesToTrack(thresholded,corners,maxCorners,qualityLevel,minDistance,Mat(),blockSize,useHarisDetector,k);
+  /*
+  std::vector<cv::Moments> mu(contours.size());
+  for(int i=0;i<contours.size();i++)
+    mu[i]=cv::moments(contours[i],false);
+  std::vector<cv::Point2f> mc(contours.size());
+  for(int i=0;i<contours.size();i++)
+    mc[i]=cv::Point2f(mu[i].m10/mu[i].m00, mu[i].m01/mu[i].m00);
+  */
+
+  for(int i=0;i<lines.size();i++){
+    float rho = lines[i][0],theta = lines[i][1];
+    Point pt1, pt2;
+    double a = cos(theta), b = sin(theta);
+    double x0 = a*rho, y0 = b*rho;
+    pt1.x = cvRound(x0 + 1000*(-b));
+    pt1.y = cvRound(y0 + 1000*(a));
+    pt2.x = cvRound(x0 - 1000*(-b));
+    pt2.y = cvRound(y0 - 1000*(a));
+    //line(original,pt1,pt2,YELLOW,3);
+    //cv::Vec4i l = lines[i];
+    //line(original,Point(l[0],l[1]), Point(l[2] , l[3]), YELLOW, 3);
+  }
+  
+  for(int i=0;i<contours.size();i++){
+    //drawContours(original,contours,i,BLUE,2,8,hierarchy,0,Point());
+    //circle(original, mc[i],4,RED,-1,8,0);
+    //circle(original, corners[i],4,BLUE,-1,8,0);
+    printf("found %d\n",i);
+  }
+  //------------- preselect by perimeter ------------------
   /*
   for (std::vector<std::vector<Point> >::iterator it = contours.begin(); it != contours.end();){
     if (it->size() < 10){//min contour
@@ -203,7 +275,6 @@ int findTarget(Mat original, Mat thresholded, Targets *targets)
   //--------------------------------------------------------
 
   std::vector<RotatedRect> minRect(contours.size());
-  Mat drawing = Mat::zeros(original.size(), CV_8UC3);
 
   if (!contours.empty() && !hierarchy.empty()) {
 
@@ -214,6 +285,9 @@ int findTarget(Mat original, Mat thresholded, Targets *targets)
       cv::Point2f rect_points[4];
       minRect[i].points(rect_points);
       std::copy(rect_points,rect_points+4,targets[i].points);
+      std::vector<cv::Point2f> vecX (rect_points,rect_points+4);
+      std::vector<cv::Point2f> vecY (rect_points,rect_points+4);
+
       /*
       if(qdebug>2)
 	std::cout<<*targets[i].points<<"\n";
@@ -242,10 +316,58 @@ int findTarget(Mat original, Mat thresholded, Targets *targets)
       //double area =  Width * Height;
       //targets[i].area = area;
 
-      for (int j = 0; j < 4; j++) { 
-	line(original,rect_points[j], rect_points[(j + 1) % 4], RED, 1, 8);
-	printf("drawing line %d\n",j);
+      cv::Point2f topleft;
+      /*
+      int firstYHigh = 0;
+      int secondYHigh = 0;
+      int firstXHigh = 0;
+      int secondXHigh = 0;
+      for(int a=1;a<4;a++){
+	if(rect_points[a].y < rect_points[firstYHigh].y){
+	  secondYHigh = firstYHigh;
+	  firstYHigh = a;
+	  }
+	  }
+      for(int a=1;a<4;a++){
+	if(rect_points[a].x < rect_points[firstXHigh].x){
+	  secondXHigh = firstXHigh;
+	  firstXHigh = a;
+	}
       }
+      if(firstYHigh == secondXHigh)
+	topleft = rect_points[firstYHigh];
+      else if(secondYHigh == firstXHigh)
+	topleft = rect_points[secondYHigh];
+      */
+      std::sort(vecX.begin(),vecX.end(),funcX);
+      if(vecX[0].y > vecX[1].y)
+	topleft = vecX[0];
+      else
+	topleft = vecX[1];
+      std::vector<Point2f> vec = vecX;//(vecX.begin(),vecX.end());
+      Mat croppedThresh = thresholded(cv::Rect());
+      for (int j = 0; j < 4; j++) { // add a sort based on position on screen
+	switch(j){
+	case 0:
+	  line(original,vec[j], vec[(j + 1) % 4], RED, 1, 8);
+	  circle(original, vec[j],4,RED,-1,8,0);
+	  break;
+	case 1:
+	  line(original,vec[j], vec[(j + 1) % 4], BLUE, 1, 8);
+	  circle(original, vec[j],4,BLUE,-1,8,0);
+	  break;
+	case 2:
+	  line(original,vec[j], vec[(j + 1) % 4], GREEN, 1, 8);
+	  circle(original, vec[j],4,GREEN,-1,8,0);
+	  break;
+	case 3:
+	  line(original,vec[j], vec[(j + 1) % 4], YELLOW, 1, 8);
+	  circle(original, vec[j],4,YELLOW,-1,8,0);
+	  break;
+	}
+      }
+      
+      circle(original, topleft,4,RED,-1,20,0);
       /*
       Rect box = minRect[i].boundingRect();
       targets[i].found = "no";
@@ -477,7 +599,7 @@ void* VideoCap(void *args){
   printf("setting auto exposure\n");
   vcap.set(cv::CAP_PROP_AUTO_EXPOSURE, 1);//255
   printf("setting exposure\n");
-  vcap.set(cv::CAP_PROP_EXPOSURE,100);
+  vcap.set(cv::CAP_PROP_EXPOSURE,85);
   FrameWidth = vcap.get(cv::CAP_PROP_FRAME_WIDTH);
   FrameHeight = vcap.get(cv::CAP_PROP_FRAME_HEIGHT);
   while (true){
@@ -787,12 +909,26 @@ int main(int argc, const char* argv[]){
 	  }
 	}
       }
-      if(switches.SHOWORIG)
-	imshow("Original", img);
-      if(switches.SHOWTRESH)
-	imshow("Thresholded", thresholded);
-      if(switches.SHOWHUE)
-	imshow("HSV" , HSV);
+      //f(firstTimeTest){
+	if(switches.SHOWORIG)
+	  imshow("Original", img);
+	if(switches.SHOWTRESH)
+	  imshow("Thresholded", thresholded);
+	if(switches.SHOWHUE)
+	  imshow("HSV" , HSV);
+	/*
+	firstTimeTest = false;
+      } else {
+	if(switches.SHOWORIG)
+	  updateWindow("Original");
+	if(switches.SHOWTRESH)
+	  updateWindow("Thresholded");
+	if(switches.SHOWHUE)
+	  updateWindow("HSV");
+      }
+	*/
+
+      
       if(switches.DOPRINT)
 	printf("x=%.2f, z=%.2f, dist=%.2f, angle=%.2f, angle2=%.2f, OffSetx=%.2f, speed=%.2f, turn=%.2f, gyro=%.2f\n",position.x,position.z,position.dist,position.angle,position.angle2,position.OffSetx,position.speed,position.turn,position.gyro);
       pthread_mutex_unlock(&targetMutex);
