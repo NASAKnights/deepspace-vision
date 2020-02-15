@@ -49,7 +49,10 @@ public:
   std::string reason;
   double angle;
   double ratio;
+  std::vector<cv::Point> corners;
   int offby;
+  cv::RotatedRect rect;
+  cv::Rect boundingRect;
   cv::Point2f points[4];
   void NullTargets()
   {

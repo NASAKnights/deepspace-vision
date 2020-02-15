@@ -21,18 +21,20 @@ using namespace cv;
 #define ASIZE 10
 
 bool firstTimeTest = true;
+int printTime = 0;
+
 
 //Editable
 double MinRatio = 0.1;
 double MaxRatio = 0.65;
 int MaxDiff = 1000;
 //colors
-int minH = 67;//81
+int minH = 0;//81
 int maxH = 255;
-int minS = 53;//41
+int minS = 0;//41
 int maxS = 255; // 5 without filter
-int minV = 143;
-int maxV = 255;
+int minV = 219;//219
+int maxV = 241;
 //booleans
 struct Switches {
   bool SHOWORIG;
@@ -42,8 +44,8 @@ struct Switches {
   bool USESERVER;
   bool USECOLOR;
   bool DOPRINT;
-  bool SERVO;
-  bool TURNCAM;
+  //bool SERVO;
+  //bool TURNCAM;
 };
 int addr = 0x04;
 int file_i2c;
@@ -68,8 +70,8 @@ void* VideoCap(void* arg);
 pthread_t tcpserver;
 void* opentcp(void* arg);
 
-pthread_t moveServoThread;
-void* moveServo(void* arg);
+//pthread_t moveServoThread;
+//void* moveServo(void* arg);
 
 pthread_t videoServerThread;
 void* videoServer(void* arg);
@@ -102,9 +104,10 @@ bool updated;
 int buttonPress;
 
 
-Targets *tLeft;
-Targets *tRight;
-void findAnglePnP(cv::Mat im, Targets *tLeft, Targets *tRight, Position *position);
+//Targets *tLeft;
+//Targets *tRight;
+Targets target;
+void findAnglePnP(cv::Mat im, Targets target, Position *position);
 
 int setServoAngle;
 int readServoAngle;
@@ -121,8 +124,9 @@ bool funcY (cv::Point2f p1, cv::Point2f p2){
 
 
 class Clock{
+private:
+    struct timeval time1, time2;
 public:
-  struct timeval time1, time2;
   Clock(){
     gettimeofday(&time1,NULL);
   }
@@ -177,86 +181,75 @@ void createTrackbars()
 //--------------------------------------------------------------------------------
 
 int findTarget(Mat original, Mat thresholded, Targets *targets){
-  Mat test;
-  std::vector<Vec4i> hierarchy;
-  std::vector<std::vector<Point> > contours;
-  //findContours(thresholded, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+  bool printTimeTarget = false;
+  if(printTime==2)
+    printTimeTarget=true;
+  Clock clock;
+  Clock between;
+  
+  double qualityLevel = 0.05;
+  double minDistance = 50;
+  int blockSize = 3;
+  bool useHarisDetector = false;
+  double k = 0.04;//0.04
+  int maxCorners = 4;
 
-  Mat dilateElement = getStructuringElement( MORPH_RECT,Size(3,3));
-  Mat erodeElement = getStructuringElement( MORPH_RECT,Size(3,3));
-  //erode(thresholded,thresholded,erodeElement);
-  //dilate(thresholded,thresholded,dilateElement);
-  
-  
-  std::vector<cv::Point2f> corners;
+  /*
   double qualityLevel = 0.05;
   double minDistance = 10;
   int blockSize = 3;
   bool useHarisDetector = true;
   double k = 0.04;//0.04
   int maxCorners = 100;
-  //kernel = np.ones();
-  
-  //dilate(thresholded,thresholded,dilateElement);
-  //erode(thresholded,thresholded,erodeElement);
-  erode(thresholded,thresholded,erodeElement);
-  dilate(thresholded,thresholded,dilateElement);
-  GaussianBlur(thresholded,thresholded,Size(3,3),0);
-  cv::Canny(thresholded,thresholded,50,100,3); 
-  //dilate(thresholded,thresholded,dilateElement);
-  //erode(thresholded,thresholded,erodeElement);
-  
-  //blur(thresholded,thresholded,Size(2,2));
-  //blur(thresholded,thresholded,Size(3,3));
-  findContours(thresholded, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE);
-  std::vector<Vec2f> lines;
-  //HoughLinesP(thresholded,lines,1,3.141592/180,75,0,100);
-
-  //dilate(thresholded,thresholded,dilateElement);
-  //GaussianBlur(thresholded,thresholded,Size(3,3),0);
-
-  HoughLines(thresholded,lines,1,3.141592/180,65,0,0);
-  //cv::goodFeaturesToTrack(thresholded,corners,maxCorners,qualityLevel,minDistance,Mat(),blockSize,useHarisDetector,k);
-  /*
-  std::vector<cv::Moments> mu(contours.size());
-  for(int i=0;i<contours.size();i++)
-    mu[i]=cv::moments(contours[i],false);
-  std::vector<cv::Point2f> mc(contours.size());
-  for(int i=0;i<contours.size();i++)
-    mc[i]=cv::Point2f(mu[i].m10/mu[i].m00, mu[i].m01/mu[i].m00);
   */
-
-  for(int i=0;i<lines.size();i++){
-    float rho = lines[i][0],theta = lines[i][1];
-    Point pt1, pt2;
-    double a = cos(theta), b = sin(theta);
-    double x0 = a*rho, y0 = b*rho;
-    pt1.x = cvRound(x0 + 1000*(-b));
-    pt1.y = cvRound(y0 + 1000*(a));
-    pt2.x = cvRound(x0 - 1000*(-b));
-    pt2.y = cvRound(y0 - 1000*(a));
-    //line(original,pt1,pt2,YELLOW,3);
-    //cv::Vec4i l = lines[i];
-    //line(original,Point(l[0],l[1]), Point(l[2] , l[3]), YELLOW, 3);
+  if(printTimeTarget){
+    clock.restart();
+    between.restart();
+    printf("begin: \n");
   }
   
-  for(int i=0;i<contours.size();i++){
-    //drawContours(original,contours,i,BLUE,2,8,hierarchy,0,Point());
-    //circle(original, mc[i],4,RED,-1,8,0);
-    //circle(original, corners[i],4,BLUE,-1,8,0);
-    printf("found %d\n",i);
+  std::vector<Vec4i> hierarchy;
+  std::vector<std::vector<Point> > contours;
+  Mat dilateElement = getStructuringElement( MORPH_RECT,Size(3,3));
+  Mat erodeElement = getStructuringElement( MORPH_RECT,Size(3,3));
+  std::vector<cv::Point2f> corners;
+  if(printTimeTarget){
+    printf(" init         %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
+    between.restart();
+  }
+  //erode(thresholded,thresholded,erodeElement);
+  if(printTimeTarget){
+    printf(" eroding      %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
+    between.restart();
+  }
+  //dilate(thresholded,thresholded,dilateElement);
+  if(printTimeTarget){
+    printf(" dialating    %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
+    between.restart();
+  }
+  //GaussianBlur(thresholded,thresholded,Size(3,3),0);
+  if(printTimeTarget){
+    printf(" gaus blur    %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
+    between.restart();
+  }
+  //findContours(thresholded, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE);
+  //findContours(thresholded, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE);
+  findContours(thresholded, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+  if(printTimeTarget){
+    printf(" findContours %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
+    between.restart();
   }
   //------------- preselect by perimeter ------------------
-  /*
+  
   for (std::vector<std::vector<Point> >::iterator it = contours.begin(); it != contours.end();){
-    if (it->size() < 10){//min contour
+    if (it->size() < 100){//min contour
       it = contours.erase(it);
-      //if (qdebug>4)
-	std::cout << "erased" << std::endl;
+      if (qdebug>4)
+	std::cout << "erased perim" << std::endl;
     } else
       ++it;
   }
-  */
+  
 
   //-------------- select by number of contours ------------
 
@@ -273,164 +266,126 @@ int findTarget(Mat original, Mat thresholded, Targets *targets){
   }
   
   //--------------------------------------------------------
-
+  if(printTimeTarget){
+    printf(" fltr prm&num %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
+    between.restart();
+  }
   std::vector<RotatedRect> minRect(contours.size());
-
+  std::vector<std::vector<Point>> hull(contours.size());
+  std::vector<std::vector<Point>> art;
+  //std::vector<std::vector<Point>> squeezedArt;
+  std::vector<Point> approx;
+  //Mat workingImage(480,640,CV_8UC1,Scalar(0));
+  Mat workingImage(FrameHeight,FrameWidth,CV_8UC1,Scalar(0));
+  Mat  workingImageSq;
+  int num = -1;
+  if(printTimeTarget){
+    printf(" init#2       %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
+    between.restart();
+  }
   if (!contours.empty() && !hierarchy.empty()) {
 
     for (int i = 0; i < (int) contours.size(); i++){
+      if(printTimeTarget){
+	printf("i: %d\n",i);
+      }
       targets[i].NullTargets();
-      //if (hierarchy[i][2]!=-1) {if (qdebug>2) printf("failed hierarchy\n"); continue;}
+      if (hierarchy[i][2]!=-1) {if (qdebug>2) printf("failed hierarchy\n"); continue;}
       minRect[i] = minAreaRect(Mat(contours[i]));
       cv::Point2f rect_points[4];
       minRect[i].points(rect_points);
       std::copy(rect_points,rect_points+4,targets[i].points);
-      std::vector<cv::Point2f> vecX (rect_points,rect_points+4);
-      std::vector<cv::Point2f> vecY (rect_points,rect_points+4);
-
-      /*
-      if(qdebug>2)
-	std::cout<<*targets[i].points<<"\n";
-      double w1 = sqrt(pow((rect_points[0].x-rect_points[1].x),2)+
-		       pow((rect_points[0].y-rect_points[1].y),2));
-      double w2 = sqrt(pow((rect_points[2].x-rect_points[3].x),2)+
-		       pow((rect_points[2].y-rect_points[3].y),2));
-      double h1 = sqrt(pow((rect_points[1].x-rect_points[2].x),2)+
-		       pow((rect_points[1].y-rect_points[2].y),2));
-      double h2 = sqrt(pow((rect_points[3].x-rect_points[0].x),2)+
-		       pow((rect_points[3].y-rect_points[0].y),2));
-
-      double Width = (w1+w2)/2;
-      double Height = (h1+h2)/2;
-      
-      targets[i].height = Height;
-      targets[i].width = Width;
-      if (w1>h1){
-	targets[i].height = Width;
-	targets[i].width = Height;
-	Width=targets[i].width;
-	Height=targets[i].height;
+      targets[i].rect = minRect[i];
+      targets[i].boundingRect = minRect[i].boundingRect();
+      if(printTimeTarget){
+	printf(" findRct     %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
+	between.restart();
       }
-      */
-
-      //double area =  Width * Height;
-      //targets[i].area = area;
-
-      cv::Point2f topleft;
-      /*
-      int firstYHigh = 0;
-      int secondYHigh = 0;
-      int firstXHigh = 0;
-      int secondXHigh = 0;
-      for(int a=1;a<4;a++){
-	if(rect_points[a].y < rect_points[firstYHigh].y){
-	  secondYHigh = firstYHigh;
-	  firstYHigh = a;
-	  }
-	  }
-      for(int a=1;a<4;a++){
-	if(rect_points[a].x < rect_points[firstXHigh].x){
-	  secondXHigh = firstXHigh;
-	  firstXHigh = a;
-	}
+      bool flag= false;
+      int bounding = 20;
+      for(int k=0;k<4;k++){
+	//if(abs(rect_points[k].x-320) > (320-bounding) || abs(rect_points[k].y-240) > (240-bounding))
+	if(abs(rect_points[k].x-FrameWidth/2) > (FrameWidth/2-bounding) || abs(rect_points[k].y-FrameHeight/2) > (FrameHeight/2-bounding))
+	  flag = true;
       }
-      if(firstYHigh == secondXHigh)
-	topleft = rect_points[firstYHigh];
-      else if(secondYHigh == firstXHigh)
-	topleft = rect_points[secondYHigh];
-      */
-      std::sort(vecX.begin(),vecX.end(),funcX);
-      if(vecX[0].y > vecX[1].y)
-	topleft = vecX[0];
-      else
-	topleft = vecX[1];
-      std::vector<Point2f> vec = vecX;//(vecX.begin(),vecX.end());
-      Mat croppedThresh = thresholded(cv::Rect());
-      for (int j = 0; j < 4; j++) { // add a sort based on position on screen
-	switch(j){
-	case 0:
-	  line(original,vec[j], vec[(j + 1) % 4], RED, 1, 8);
-	  circle(original, vec[j],4,RED,-1,8,0);
-	  break;
-	case 1:
-	  line(original,vec[j], vec[(j + 1) % 4], BLUE, 1, 8);
-	  circle(original, vec[j],4,BLUE,-1,8,0);
-	  break;
-	case 2:
-	  line(original,vec[j], vec[(j + 1) % 4], GREEN, 1, 8);
-	  circle(original, vec[j],4,GREEN,-1,8,0);
-	  break;
-	case 3:
-	  line(original,vec[j], vec[(j + 1) % 4], YELLOW, 1, 8);
-	  circle(original, vec[j],4,YELLOW,-1,8,0);
-	  break;
-	}
-      }
-      
-      circle(original, topleft,4,RED,-1,20,0);
-      /*
-      Rect box = minRect[i].boundingRect();
-      targets[i].found = "no";
-      Point center(box.x + box.width / 2, box.y + box.height / 2);
-      targets[i].center=center;
-      
-      if(targets[i].center.y < 100)
+      if(flag){
+	if(printTimeTarget)printf("  SKIP: edge too close\n");
 	continue;
-      if(targets[i].center.y > 380)
+      }
+      
+      for(int j=0;j<4;j++){
+	line(original,rect_points[j],rect_points[(j+1)%4],BLUE,1,8);
+	circle(original, rect_points[j],3,RED,-1,8,0);
+      }
+      if(printTimeTarget){
+	printf(" drawRct     %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
+	between.restart();
+      }
+      convexHull(contours[i],hull[i]);
+      if(printTimeTarget){
+	printf(" convexHull   %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
+	between.restart();
+      }
+      double ratioTest = contourArea(hull[i])/contourArea(contours[i]);
+      if(ratioTest < 4){
+	  if(printTimeTarget) printf("  SKIP: Area-Ratio: %.2f\n",ratioTest);
 	continue;
+      }
+      if(printTimeTarget){
+	printf(" ratio test   %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
+	between.restart();
+      }
+      approxPolyDP(hull[i],approx,arcLength(hull[i],true)*0.015,true);//0.025
+      if(printTimeTarget){
+	printf(" after poly   %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
+	between.restart();
+      }
+      art.push_back(approx);
       
-      double angle = minRect[i].angle;
-      targets[i].angle=angle;
-
-      double RRatio = Width / Height;
-      targets[i].ratio=RRatio;
-      if ( MinRatio >  RRatio || RRatio > MaxRatio ){if (qdebug>2) printf("failed ratio : %f \n",RRatio); continue;}
-      
-      double ang1=15, ang2=75;
-      if ( abs(abs(angle)-ang1)>10 && abs(abs(angle)-ang2)>10 ){if (qdebug>2) printf("failed angle\n"); continue;}
-
-      targets[i].number = i;
-      targets[i].status=1; // --- preselected target ----	
-      int ttt = 0;
-      for ( int k = 0; k < i; k++) {
-
-	if (targets[i].status==0) {if (qdebug>2) printf("failed status\n");continue;}
-	
-	double xi = targets[i].center.x;
-	double xk = targets[k].center.x;
-	double yi = targets[i].center.y;
-	double yk = targets[k].center.y;
-
-	double dx = xi - xk;
-	double dy = yi - yk;
-
-	ttt++;
-	if ( abs(dy)>40 ) {if (qdebug>3) printf("failed distance: %f: %d\n",dy,ttt);continue;}
-	double arr = targets[i].area/targets[k].area;
-	if (arr>1) arr=1./arr;
-	if (qdebug > 3)std::cout << " area " << targets[i].area << " " << targets[k].area << " arr= " << arr << std::endl;
-	if (arr<0.5) {if (qdebug>2) printf("failed area ratio: %f: %d\n",arr,ttt);continue;}
-	if (abs(dx)<targets[i].height/2.0 || abs(dx) > targets[i].height*2.0){continue;}
-	//------  end selection -------
-
-	if (targets[i].status==1) { targets[i].status=2; targets[i].found = "yes"; ntargets++ ; }
-	if (targets[k].status==1) { targets[k].status=2; targets[k].found = "yes"; ntargets++ ; }
-
-	if (dx>0) { tLeft=&targets[k]; tRight=&targets[i]; }
-	else      { tLeft=&targets[i]; tRight=&targets[k]; }
-
-
-      } //---end contour loop k
-      */
+      //Mat(targets[i].boundingRect).copyTo(workingImage);
+      //drawContours(original,art,i,GREEN,4);
+      //squeezedArt
+      num = i;
+      ntargets++;
     }//---end contour loop i
-
+    if(printTimeTarget) printf("end:\n");
+    for(unsigned int j=0;j<art.size();j++){
+      drawContours(workingImage,art,j,Scalar(255));
+      drawContours(original,art,j,GREEN,4);
+    }
+    if(num!=-1)
+      workingImage(targets[num].boundingRect).copyTo(workingImageSq);
+    if(printTimeTarget){
+      printf(" drw on Mat   %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
+      between.restart();
+    }
+    if(ntargets==1){
+      cv::goodFeaturesToTrack(workingImageSq,corners,maxCorners,qualityLevel,minDistance,Mat(),blockSize,useHarisDetector,k);
+      for(unsigned int i=0;i<corners.size();i++){
+	corners[i].x=corners[i].x+targets[num].boundingRect.x;
+	corners[i].y=corners[i].y+targets[num].boundingRect.y;
+      }
+      if(printTimeTarget){ 
+	printf(" goodFeatures %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
+	between.restart();
+      }
+      //cv::cornerHarris(workingImage,corners,); // test this out instead?
+      target.corners.clear();
+      target.corners.push_back(corners[0]);
+      target.corners.push_back(corners[1]);
+      target.corners.push_back(corners[2]);
+      target.corners.push_back(corners[3]);
+    }
   }
-
+  /*
   if(ntargets==2){
     line(original,tLeft->center, tRight->center, YELLOW, 1);
     line(original,tLeft->center, tLeft->center, RED, 3);
     line(original,tRight->center, tRight->center, RED, 3);
   }
+  */
+  if(printTimeTarget)
+    printf("--finalTime: %.2f\n==---------------------------==\n",clock.getTimeAsMillis());
   return ntargets;
 }
 
@@ -444,7 +399,7 @@ Mat ThresholdImage(Mat original)
 }
 
 //-Threads-----------------------------------------------------------------------
-
+/*
 bool setAngle(int angle){
   printf("setting to angle: %d\n",angle);
   if(angle>90)
@@ -490,77 +445,49 @@ void* moveServo(void *arg){
     
   }
 }
+*/
 
 
 void* drive(void* arg){
   Position* pos = (Position*) arg;
   bool init = true;
   double angle2Local;
-  Clock clock1;
-  int counting = 0;
+  int counter12 = 0;
   while(true){
     if(buttonPress == 0)
       init = true;
     if(buttonPress == 1 && init){ //initialize loop when first button pressed;
       init = false;
-      clock1.restart();
+      printf("button press: INIT!\n");
     }
     if(updated){
       pthread_mutex_lock(&targetMutex);
       angle2Local = pos->angle2;
       pthread_mutex_unlock(&targetMutex);
     }
+    /*
     if(buttonPress == 1){
-      //if(clock1.getTimeAsMillis() > 500)
-      //setServoAngle = 0;
-
       setServoAngle = -angle2Local;
     }
-    
-    if(pos->dist>75 && buttonPress == 1){
-      //pos->speed = 0.5;//0.25
-      double maxSpeed = 0.8;
-      double speed = (1-sqrt(abs(turn))) * maxSpeed;
-      pos->speed = (1-turn) * maxSpeed - maxSpeed + speed; //power L
-      pos->turn = turn * maxSpeed + speed; // power R
-      printf("turnval: %.2f, speedval: %.2f, speed(L) : %.2f, turn(R): %.2f\n",turn,speed, pos->speed,pos->turn);
+    */
+    if(/*pos->dist>75 && */buttonPress == 1){
+      pos->speed = 0.0;
+      if(turn>=0)
+	pos->turn = std::min(sqrt(abs(turn/1.5)),0.7);
+      else
+	pos->turn = std::max(-sqrt(abs(turn/1.5)),-0.7);
+      if(counter12++ % 50 == 0)
+	printf("turn: %.2f angle: %.2f ; gyro %.2f\n",pos->turn,pos->angle,gyroAngle);
     }else{
       pos->speed = 0.0;
       pos->turn = 0.0;
     }
     
     if(updated){
-      //if(buttonPress == 0)
-      driveAngle = alphaGlobal+(-gyroAngle)+(-readServoAngle)+(-angle2Local); // calculate the needed position for the turn
-	
-      //else{
-	//if(clock1.getTimeAsMillis() > 500)
-	//  driveAngle = alphaGlobal+(-gyroAngle)+(-readServoAngle);//+(-angle2Local); // calculate the needed position for the turn
-      //}
-      printf("\n\nUPDATED\n\n");
+      driveAngle = alphaGlobal+(-gyroAngle); // calculate the needed position for the turn
       updated = false;
-    } else {
-      //move = (abs(driveAngle-(-gyroAngle)) < 10) ? false : true;
-      /*
-      if(abs(driveAngle-(-gyroAngle)) < 10){
-	turn = 0.0;
-	move = false;
-      } else {
-	//turn = turn;
-	move = true;
-      }
-      */
-      
     }
     move = (pos->dist > 75) ? true : false;
-
-    counting++;
-    if(counting % 50 == 0){
-      //if(clock1.getTimeAsMillis() < 500) printf("sleeping\n");    
-      //printf("drive: driveAngle %.2f : -gyro %.2f; alpha %.2f; -servo %d; -alpha2 %.2f  ",driveAngle,-gyroAngle,alphaGlobal,-readServoAngle,-angle2Local);
-      //printf("counter: %d\n",counting);
-      
-    }
     usleep(50);
   }
 }
@@ -569,7 +496,7 @@ void* movePID(void* arg){
   PID* drivePID;
   struct timeval tnew, told;
   double turnLoc, dt;
-  drivePID = new PID(0.0,1,-1, 0.017,0.005,0.0); // 0.01 // 0.001 // 0.007
+  drivePID = new PID(0.0,1,-1, 0.01,0.005,0.0005); // 0.01,0.005,0.0
   
   while(true){
     gettimeofday(&tnew,NULL);
@@ -600,6 +527,10 @@ void* VideoCap(void *args){
   vcap.set(cv::CAP_PROP_AUTO_EXPOSURE, 1);//255
   printf("setting exposure\n");
   vcap.set(cv::CAP_PROP_EXPOSURE,85);
+  
+  vcap.set(cv::CAP_PROP_FRAME_WIDTH,640);//1920//1280
+  vcap.set(cv::CAP_PROP_FRAME_HEIGHT,480);//1080//720
+
   FrameWidth = vcap.get(cv::CAP_PROP_FRAME_WIDTH);
   FrameHeight = vcap.get(cv::CAP_PROP_FRAME_HEIGHT);
   while (true){
@@ -639,21 +570,28 @@ void* USBSlave(void* arg){
       if(nb!=1)
 	printf("nb=%d\n",nb);
       if(nb<0){sleep(1); ii=11; continue;}
+      if(line[ii]==',') { line[ii]=' ';}
       if(line[ii]=='\n') {line[ii+1]=0; break;}
     }
     //printf("line=%s\n",line);
     float roll, pitch, yaw;
-    sscanf(line,"%f,%f,%f",&roll,&pitch,&yaw);
-    gyroAngle=yaw/100.0f;
+    float ACCX,ACCY,ROLL,PITCH,GYROZ,AAZ;
+    //sscanf(line,"%f,%f,%f",&roll,&pitch,&yaw);
+    sscanf(line,"%f %f %f %f %f %f %f",&ACCX,&ACCY,&ROLL,&PITCH,&yaw,&GYROZ,&AAZ);
+    if(GYROZ > 100)
+      printf("yaw: %.2f; GYROZ: %.2f\n",yaw,GYROZ);
+    gyroAngle=yaw;
   }
 }
 
 int main(int argc, const char* argv[]){
   int frFound = 0;
   int frLost = 0;
+  Clock clock, between;
+  bool printTimeMain = false;
   //double deltaGyro, prevGyro = 0;
   Switches switches;
-  switches.SERVO = false;
+  //switches.SERVO = false;
   switches.SHOWORIG = false;
   switches.SHOWHUE = false;
   switches.SHOWTRESH = false;
@@ -661,10 +599,10 @@ int main(int argc, const char* argv[]){
   switches.USESERVER = false;
   switches.USECOLOR = false;
   switches.DOPRINT = false;
-  switches.TURNCAM = false;
-  if(argc==2){
+  //switches.TURNCAM = false;
+  if(argc>=2){
     std::string args = argv[1];
-    std::vector<std::string> token;
+    std::vector<char> token;
     if(args.compare("--help")==0){
       printf("-c color\n");
       printf("-t Trackbars\n");
@@ -673,36 +611,58 @@ int main(int argc, const char* argv[]){
       printf("-h HSV\n");
       printf("-b black and white\n");
       printf("-p print stuff\n");
-      printf("-r use the servo\n");
-      printf("-a turn cam");
+      printf("param 2:\n");
+      printf("-qdebug=\n");
+      printf("-ptime=\n");
+      //printf("-r use the servo\n");
+      //printf("-a turn cam");
       return 0;
     }
-    printf("args size: %d\n",args.size());
     for(int i=1;i<(int)args.size();i++)
-      token.push_back(args.substr(i,1));
+      token.push_back(args.at(i));
     for(int i=0;i<(int)token.size();i++){
-      if(token[i]=="c")
-	switches.USECOLOR = true;
-      if(token[i]=="t")
-	switches.SHOWTRACK = true;
-      if(token[i]=="s")
-	switches.USESERVER = true;
-      if(token[i]=="o")
-	switches.SHOWORIG = true;
-      if(token[i]=="h")
-	switches.SHOWHUE = true;
-      if(token[i]=="b")
-	switches.SHOWTRESH = true;
-      if(token[i]=="p")
-	switches.DOPRINT = true;
-      if(token[i]=="r")
-	switches.SERVO = true;
-      if(token[i]=="a")
-        switches.TURNCAM = true;
-    }//#FIX
+      switch(token[i]){
+      case 'c':
+	switches.USECOLOR = true; break;
+      case 't':
+	switches.SHOWTRACK = true; break;
+      case 's':
+	switches.USESERVER = true; break;
+      case 'o':
+	switches.SHOWORIG = true; break;
+      case 'h':
+	switches.SHOWHUE = true; break;
+      case 'b':
+	switches.SHOWTRESH = true; break;
+      case 'p':
+	switches.DOPRINT = true; break;
+	//case 'r':
+	//switches.SERVO = true; break;
+	//case 'a':
+	//switches.TURNCAM = true; break;
+      }  
+    }
+    if(argc>=3){
+      std::string arg2(argv[2]);
+      if(arg2.substr(0,8).compare("-qdebug=")==0 && arg2.size()>=9){
+	qdebug = std::stoi(arg2.substr(8));
+	printf("set qdebug to %d\n",qdebug);
+      }
+      else if(arg2.substr(0,7).compare("-ptime=")==0 && arg2.size()>=8){
+	printTime = std::stoi(arg2.substr(7));
+	printf("set printTime to %d\n",printTime);
+      }
+    }
   }
-  printf("tr : %d\n",switches.SHOWTRACK);
+  if(printTime==1)
+    printTimeMain=true;
 
+  
+  if(printTimeMain){
+    printf(" getting input %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
+    between.restart();
+  }
+  
   if ((file_i2c = open(filename, O_RDWR)) < 0){
     printf("Failed to open the i2c bus");
     return false;
@@ -719,10 +679,10 @@ int main(int argc, const char* argv[]){
   gyroAngle = 0;
   driveAngle = 0;
   srand(time(NULL));
-  if(switches.SERVO){
-    pthread_create(&moveServoThread,NULL,moveServo, NULL);
-    pthread_setname_np(moveServoThread,"MoveServoThread");
-  }
+  //if(switches.SERVO){
+  //pthread_create(&moveServoThread,NULL,moveServo, NULL);
+  //pthread_setname_np(moveServoThread,"MoveServoThread");
+  //}
   gettimeofday(&t1, NULL);
   gettimeofday(&timeTest,NULL);
   videoPort=4097;
@@ -758,19 +718,58 @@ int main(int argc, const char* argv[]){
   //set all values to 0 before program begins in loop forever.
   nullifyStruct(position);
   nullifyStruct(positionAV);
+  if(printTimeMain){
+    printf(" initThreads %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
+    between.restart();
+  }
+
   while (true){
+    clock.restart();
+    between.restart();
     pthread_mutex_lock(&frameMutex);
     if(!frame.empty() && newFrame){ //check if new frame is available
       frame.copyTo(img);
+      if(printTimeMain){
+	printf(" get frame   %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
+	between.restart();
+      }
+      
       pthread_mutex_unlock(&frameMutex);
       cv::cvtColor(img, HSV, CV_BGR2HSV);
+      if(printTimeMain){
+	printf(" to HSV      %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
+	between.restart();
+      }
+
       thresholded = ThresholdImage(HSV);
+      if(printTimeMain){
+	printf(" thresh      %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
+	between.restart();
+      }
+
       morphOps(thresholded);
+      if(printTimeMain){
+	printf(" Morph       %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
+	between.restart();
+      }
+
       pthread_mutex_lock(&targetMutex);
       int nt = findTarget(img, thresholded, targets);
+      if(printTimeMain){
+	printf(" findTarget  %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
+	between.restart();
+      }
+
       nullifyStruct(position);
-      if (nt==2){
-	findAnglePnP(img,tLeft,tRight,&position);
+      //printf("checking %d==1?\n",nt);
+      if (nt==1){
+	printf("updated\n");
+	findAnglePnP(img,target,&position);
+	if(printTimeMain){
+	  printf(" solvePnP    %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
+	  between.restart();
+	}
+
 	//put latest values into avaraging struct, delete old one.
 	
 	posA.push_back(position);
@@ -800,7 +799,11 @@ int main(int argc, const char* argv[]){
 	positionAV.dist/=cntr;
 	positionAV.OffSetx/=cntr;
 	positionAV.gyro=gyroAngle;
-
+	if(printTimeMain){
+	  printf(" avaraging   %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
+	  between.restart();
+	}
+	
 
 	//====UPDATES====
 
@@ -813,29 +816,8 @@ int main(int argc, const char* argv[]){
 	positionAV.P=P;
 	positionAV.I=I;
 	positionAV.D=D;
-	//positionAV.turn = turn;
 
-
-	// set speed to constant (any values above 0.0 works) iff the target is within 200 && -200 bounds, and the distance to target is >65cm
-	//                       (since the robot calculates the speed based on turn by its self)
-	//if(position.dist>65 && buttonPress == 1)
-	//positionAV.speed=0.5;//0.25
-
-	/*
-	if(abs(positionAV.angle)>10){
-	  servoArgs.angle += positionAV.angle;//copysign(,(positionAV.angle));
-	}
-        */
-
-	printf("angles: alpha: %4.2f, alpha2: %4.2f, readServoAngle: %d, gyro: %4.2f\n",positionAV.angle,positionAV.angle2,readServoAngle,gyroAngle);
-	/*
-	if(buttonPress == 1){
-	  setServoAngle = (int) -positionAV.angle + readServoAngle;
-	  if(position.dist < 150)
-	    setServoAngle = 0;
-	  move = true;
-	}
-	*/
+	if(switches.DOPRINT) printf("angles: alpha: %4.2f, alpha2: %4.2f, readServoAngle: %d, gyro: %4.2f\n",positionAV.angle,positionAV.angle2,readServoAngle,gyroAngle);
 	updated = true;
 
 	
@@ -843,79 +825,31 @@ int main(int argc, const char* argv[]){
 	  std::cout << "" << std::endl;
 	  std::cout << "/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*" << std::endl;
 	}
-	
-	if(switches.TURNCAM){
-	  frFound++;
-	  if(frFound >= 5){
-	    frLost = 0;
-	    frFound = 6;
-	    //resetCam = false;
-	  }
+	if(printTimeMain){
+	  printf(" settingGlob %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
+	  between.restart();
 	}
-	
-	printf("found: frFound: %d, frLost:%d\n",frFound, frLost);
+
       }else{
-	//nullifyStruct(positionAV);
+	nullifyStruct(positionAV);
 	positionAV.z=-1;
-	if(switches.TURNCAM){
-	  
-	  /*
-	  if(resetCam){
-	    resetCam = false;
-	    printf("\ncam reset\n\n");
-	    setServoAngle = -90;
-	    usleep(1000*1000);
-	    gettimeofday(&lostAtTime,NULL);
-	  }
-	  */
-	  if(frLost >= 15 && frFound >= 5){
-	    //resetCam = true;
-	    frFound = 0;
-	    frLost = 0;
-	  }
-	  if(frLost >= 20){
-	    frFound = 0;
-	    frLost = 21;
-	  }
-	  
-	  frLost++;
-	  missFR++;
-	  gettimeofday(&timeTest,NULL);
-	  double dt = (timeTest.tv_usec-lostAtTime.tv_usec+1000000 * (timeTest.tv_sec - lostAtTime.tv_sec))*1e-6;
-	  printf("lost: frFound: %d, frLost:%d\n",frFound, frLost);
-	  printf("resetCam : %d, %.2f\n",resetCam,dt);
-	  if(readServoAngle < -80)
-	    resetCam = true;
-	  else if(readServoAngle > 80)
-	    resetCam = false;
-	  if(dt > .1){
-	    /*
-	    if(readServoAngle<85){
-	      if(frFound < 5 && frLost > 3){
-		setServoAngle = readServoAngle + 20;
-		printf("servo incrment Angle: %d -> %d\n",readServoAngle,setServoAngle);
-	      }
-	    }
-	    else
-	      resetCam = true;
-	    */
-	    if(frFound < 5 && frLost > 3){
-	      if(resetCam)
-		setServoAngle = readServoAngle + 10;
-	      else
-		setServoAngle = readServoAngle - 10;
-	      gettimeofday(&lostAtTime,NULL);
-	    }
-	  }
-	}
+	missFR++;
+
+
       }
       //f(firstTimeTest){
-	if(switches.SHOWORIG)
-	  imshow("Original", img);
-	if(switches.SHOWTRESH)
-	  imshow("Thresholded", thresholded);
-	if(switches.SHOWHUE)
-	  imshow("HSV" , HSV);
+      between.restart();
+      if(switches.SHOWORIG)
+	imshow("Original", img);
+      if(switches.SHOWTRESH)
+	imshow("Thresholded", thresholded);
+      if(switches.SHOWHUE)
+	imshow("HSV" , HSV);
+      if(printTimeMain){
+	printf(" imShow      %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
+	between.restart();
+      }
+      
 	/*
 	firstTimeTest = false;
       } else {
@@ -934,6 +868,9 @@ int main(int argc, const char* argv[]){
       pthread_mutex_unlock(&targetMutex);
       totalfound.clear();
       counter++;
+      if(printTimeMain){
+	printf("--finalTime: %.2f\n",clock.getTimeAsMillis());
+      }
     }//end of check for new frame
     else pthread_mutex_unlock(&frameMutex);
     counter2++;
@@ -968,10 +905,13 @@ int main(int argc, const char* argv[]){
 	}
       }
     }
-    waitKey(5);
 
+    
+    if(switches.SHOWORIG || switches.SHOWHUE || switches.SHOWTRESH || switches.SHOWTRACK)
+      waitKey(5);
+    //printf("wait?\n");
     newFrame = false;
-    usleep(10000);
+    usleep(100);
   }
 
   pthread_join(MJPEG, NULL);

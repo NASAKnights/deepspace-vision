@@ -1,7 +1,8 @@
 SHELL = /bin/sh
 
 CC = g++
-CFLAGS = -std=c++11 -Wall -g
+#CFLAGS = -std=c++11 -Wall -g
+CFLAGS = -std=c++11 -Wall -O3
 
 ifeq ($(shell uname -s), Darwin)
     INCS = -I src -I ~/LIBS/opencv40/include
@@ -56,7 +57,6 @@ target:   ${target_OBJ}
 	@echo "export LD_LIBRARY_PATH=$(PLIBS)" > env.sh
 	@echo "stty -F /dev/ttyUSB0 115200" >> env.sh
 	@echo "stty -F /dev/ttyUSB0 -hupcl" >> env.sh
-	@echo "stty -F /dev/ttyUSB1 115200" >> env.sh
 
 clnt:   clnt.o
 	${CC} ${CFLAGS} -o $@.exe clnt.o 

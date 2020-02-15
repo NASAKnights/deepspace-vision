@@ -12,44 +12,62 @@ bool showImg = false;
 #define USE_RIGHT_T
 //#define USE_OUTER_T
 bool useBoth = true;
+// (inches)
+//39 top
+//19.5 strip
+//18 height
+double i2cm = 2.54;
+double tTop = 39.0* i2cm;
+double tStrip = 19.5 * i2cm;
+double tHeight = 18.0 * i2cm;
 
-void findAnglePnP(cv::Mat im, Targets *tLeft, Targets *tRight,Position* position){
+void findAnglePnP(cv::Mat im, Targets target,Position* position){
   std::vector<cv::Point2d> img2dpoints;
-  std::vector<cv::Point2d> img2dpointstest;
+  //std::vector<cv::Point2d> img2dpointstest;
   std::vector<cv::Point2d> tBox;
+  /*
+  img2dpoints.push_back(target.corners[0]);
+  img2dpoints.push_back(target.corners[1]);
+  img2dpoints.push_back(target.corners[2]);
+  img2dpoints.push_back(target.corners[3]);
+  */
+  mod3d.clear();
+  mod3d.push_back(cv::Point3d(+tTop/2.0,0.0,0.0));//top right
+  mod3d.push_back(cv::Point3d(-tTop/2.0,0.0,0.0));//top left
+  mod3d.push_back(cv::Point3d(-tStrip/2.0,+tHeight,0.0));//bottom left
+  mod3d.push_back(cv::Point3d(+tStrip/2.0,+tHeight,0.0));// bottom right
+  
   //std::vector<cv::Mat> mod2dm;
-  
-  
   cv::Point2d center = cv::Point2d(im.cols/2,im.rows/2);//use the found center
-#ifdef USE_LEFT_T
-  //  sort point by y 
+
   while(true){
     int change = 0;
     for(int i=0;i<3;i++){
-      if(tLeft->points[i].y > tLeft->points[i+1].y){
+      if(target.corners[i].y > target.corners[i+1].y){
 	change = 1;
-	cv::Point2d tmp = tLeft->points[i];
-	tLeft->points[i]=tLeft->points[i+1];
-	tLeft->points[i+1]=tmp;
+	cv::Point2d tmp = target.corners[i];
+	target.corners[i]=target.corners[i+1];
+	target.corners[i+1]=tmp;
       }
       
     }
     if(change==0) break;
   }
-  if(tLeft->points[0].x < tLeft->points[1].x){
-    img2dpoints.push_back(tLeft->points[1]);
-    img2dpoints.push_back(tLeft->points[0]);
+  if(target.corners[0].x < target.corners[1].x){
+    img2dpoints.push_back(target.corners[1]);
+    img2dpoints.push_back(target.corners[0]);
   } else {
-    img2dpoints.push_back(tLeft->points[0]);
-    img2dpoints.push_back(tLeft->points[1]);
+    img2dpoints.push_back(target.corners[0]);
+    img2dpoints.push_back(target.corners[1]);
   }
-  if(tLeft->points[2].x < tLeft->points[3].x){
-    img2dpoints.push_back(tLeft->points[2]);
-    img2dpoints.push_back(tLeft->points[3]);
+  if(target.corners[2].x < target.corners[3].x){
+    img2dpoints.push_back(target.corners[2]);
+    img2dpoints.push_back(target.corners[3]);
   } else {
-    img2dpoints.push_back(tLeft->points[3]);
-    img2dpoints.push_back(tLeft->points[2]);
+    img2dpoints.push_back(target.corners[3]);
+    img2dpoints.push_back(target.corners[2]);
   }
+  /*
 #endif
   //-------------------------------------------
 #ifdef USE_RIGHT_T
@@ -90,7 +108,7 @@ void findAnglePnP(cv::Mat im, Targets *tLeft, Targets *tRight,Position* position
   img2dpoints.clear();
   img2dpoints=img2dpointstest;
 #endif
-  
+  */
 
 
   /*
@@ -99,6 +117,7 @@ void findAnglePnP(cv::Mat im, Targets *tLeft, Targets *tRight,Position* position
     img2dpoints.push_back(cv::Point2d(center.x+100-dx,center.y+100-dy));
     img2dpoints.push_back(cv::Point2d(center.x+100-dx,center.y-100+dy));
   */
+  /*
   if (model==0) {  model = 1;
 
     //--- build targer geometry ; should be called only once !!!
@@ -159,15 +178,18 @@ void findAnglePnP(cv::Mat im, Targets *tLeft, Targets *tRight,Position* position
       }
 #endif
     }
+
   } //--- end model build
-  for(int i=0; i < (int) mod3d.size(); i++) {
+  */
+  //for(int i=0; i < (int) mod3d.size(); i++) {
     //circle(im, mod2d[i], i, cv::Scalar(0,255,0), 2);
-    circle(im, cv::Point2d(mod3d[i].x*9+center.x,mod3d[i].y*9+center.y+20), i, cv::Scalar(255,255,0), 2);
+    //circle(im, cv::Point2d(mod3d[i].x*3+center.x,mod3d[i].y*3+center.y+20), i*5, cv::Scalar(255,255,0), 2);
      
-  }
+  //}
   //-----------  initialization of camera -------------
    
   double focal_length = im.cols;
+  //cv::Mat camera_matrix = (cv::Mat_<double>(3,3) << focal_length, 0, center.x, 0 , focal_length, center.y, 0, 0, 1);
   cv::Mat camera_matrix = (cv::Mat_<double>(3,3) << focal_length, 0, center.x, 0 , focal_length, center.y, 0, 0, 1);
   //cv::Mat camera_matrix = (cv::Mat_<double>(3,3) << 1219, 0, center.x, 0 , 1241, center.y, 0, 0, 1);
   cv::Mat dist_coeffs = cv::Mat::zeros(4,1,cv::DataType<double>::type);
@@ -190,15 +212,17 @@ void findAnglePnP(cv::Mat im, Targets *tLeft, Targets *tRight,Position* position
   double* xWorld = xWorldd.ptr<double>();
   double angle2 = atan2(xWorld[0],-xWorld[2]);
 
-  cv::Point2d tc((tLeft->center.x+tRight->center.x)/2.,(tLeft->center.y+tRight->center.y)/2.);
+  //cv::Point2d tc((tLeftOA->center.x+tRight->center.x)/2.,(tLeft->center.y+tRight->center.y)/2.);
   position->x=sin(angle2)*distance;
   position->z=cos(angle2)*distance;
   position->dist=distance;
   position->angle=angle*(180/3.141592);
   position->angle2=angle2*(180/3.141592);
-  position->OffSetx=tc.x-center.x;
-
-  
+  //position->OffSetx=tc.x-center.x;
+  //printf("dist: %.2f, alpha1: %.2f, alpha2 %.2f, x: %.2f, Z: %.2f\n",distance,position->angle,position->angle2,position->x,position->z);
+  //printf("c0 %.2f, c1 %.2f, c2 %.2f, c3 %.2f",img2dpoints[0],img2dpoints[1],img2dpoints[2],img2dpoints[3]);
+  //for(int k=0;k<4;k++)
+  //std::cout << img2dpoints[k] << std::endl;
   std::vector<cv::Point3d> axis3D;
   std::vector<cv::Point2d> axis2D;
   axis3D.push_back(cv::Point3d(10.,0,0));
@@ -208,12 +232,12 @@ void findAnglePnP(cv::Mat im, Targets *tLeft, Targets *tRight,Position* position
   if(debugPnP>3)
     std::cout << " axis 2D = " << axis2D << std::endl;
   for(int i=0; i < (int) img2dpoints.size (); i++){
-    circle(im, img2dpoints[i], i*3, cv::Scalar(0,0,255), 2);
+    circle(im, img2dpoints[i], 7,cv::Scalar(0,0,255),-1,8,0);
   }
-  cv::line(im, tc, axis2D[0], cv::Scalar(255,0,0),2);//x-blue
-  cv::line(im, tc, axis2D[1], cv::Scalar(0,255,0),2);//y-green
-  cv::line(im, tc, axis2D[2], cv::Scalar(0,0,255),2);//z-red
-  cv::circle(im,center,4,cv::Scalar(255,255,255),2);
+  //cv::line(im, tc, axis2D[0], cv::Scalar(255,0,0),2);//x-blue
+  //cv::line(im, tc, axis2D[1], cv::Scalar(0,255,0),2);//y-green
+  //cv::line(im, tc, axis2D[2], cv::Scalar(0,0,255),2);//z-red
+  //cv::circle(im,center,4,cv::Scalar(255,255,255),2);
   if(showImg){
     cv::imshow("Output", im);
     cv::waitKey(5000);
