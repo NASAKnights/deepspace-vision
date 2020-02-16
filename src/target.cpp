@@ -10,7 +10,6 @@ using namespace cv;
 /*
   removed old math
   check if ontrackbar() is needed, or can be replaced by NULL
-  remove commented out main.h sections.. and check the used values it stores.
   check and remove clnt.c from /src/
   check and maybe shorten / remove tcp_thread.*, tcplib.*, videoserver.cpp, and server.cpp
 */
