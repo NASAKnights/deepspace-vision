@@ -14,10 +14,14 @@ PID::PID( double dt, double max, double min, double Kp, double Ki, double Kd ):
   _Kp(Kp),
   _Kd(Kd),
   _Ki(Ki),
+  error_pointer(-1),
   _pre_error(0),
   _integral(0),
   oldState(0)
 {
+  for(unsigned int i=0;i<arrLen;i++)
+    error_arr[i] = 0;
+ 
 }
 
 
@@ -31,14 +35,15 @@ void PID::button(int buttonState){
 }
 
 
-
 double PID::calculate( double setpoint, double pv ,double dt, double* P, double* I, double* D)
 {
   _dt = dt;
     
   // Calculate error
   double error = setpoint - pv;
-
+  error_pointer = (error_pointer+1) % arrLen;
+  error_arr[error_pointer] = error;
+  
   // Proportional term
   double Pout = _Kp * error;
 
@@ -47,9 +52,11 @@ double PID::calculate( double setpoint, double pv ,double dt, double* P, double*
   double Iout = _Ki * _integral;
 
   // Derivative term
-  double derivative = (error - _pre_error) / _dt;
-  double Dout = _Kd * derivative;
+  //double derivative = (error - _pre_error) / _dt;
+  //double Dout = _Kd * derivative;
+  double Dout = (error_arr[error_pointer] - error_arr[(error_pointer+arrLen+1) % arrLen]) * _Kd;
 
+  
   // Calculate total output
   double output = Pout + Iout + Dout;
   if(abs(Pout) > 1.2)
@@ -70,6 +77,9 @@ double PID::calculate( double setpoint, double pv ,double dt, double* P, double*
     output = _min;
 
   // Save error to previous error
+  //error_arr.push_back(error);
+  //if(err_arr.size()>10)
+    
   _pre_error = error;
   return output;
 }

@@ -13,10 +13,12 @@ private:
   double _Kp;
   double _Kd;
   double _Ki;
+  int error_pointer;
   double _pre_error;
   double _integral;
   int oldState;
-
+  static const int arrLen = 100;
+  double error_arr[arrLen];
 };
 
 #endif

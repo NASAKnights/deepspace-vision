@@ -31,7 +31,7 @@ int MaxDiff = 1000;
 //colors
 int minH = 0;//81
 int maxH = 255;
-int minS = 0;//41
+int minS = 10;//41
 int maxS = 255; // 5 without filter
 int minV = 219;//219
 int maxV = 241;
@@ -109,9 +109,8 @@ int buttonPress;
 Targets target;
 void findAnglePnP(cv::Mat im, Targets target, Position *position);
 
-int setServoAngle;
-int readServoAngle;
 double P, I, D;
+double PIDInit[] = {-1,-1,-1};
 double turn;
 bool move;
 
@@ -136,6 +135,10 @@ public:
   double getTimeAsMillis(){
     gettimeofday(&time2,NULL);
     return (time2.tv_usec-time1.tv_usec+1000000 * (time2.tv_sec - time1.tv_sec))*0.001;
+  }
+  double getTimeAsMicros(){
+    gettimeofday(&time2,NULL);
+    return (time2.tv_usec-time1.tv_usec + 1000000 * (time2.tv_sec - time1.tv_sec)) * 0.000001;
   }
 
 };
@@ -399,58 +402,12 @@ Mat ThresholdImage(Mat original)
 }
 
 //-Threads-----------------------------------------------------------------------
-/*
-bool setAngle(int angle){
-  printf("setting to angle: %d\n",angle);
-  if(angle>90)
-    angle=90;
-  if(angle<-90)
-    angle=-90;
-  angle = angle * (1000./240.);
-  angle += 375;//350 = centered                                                                                     
-  int16_t sendAngle = (int) angle;
-  //printf("buffer sending: %d\n",sendAngle);
-  length = sizeof(sendAngle);
-  if (write(file_i2c, &sendAngle, length) != length)
-    printf("Failed to write to the i2c bus.\n");
-  return true;
-}
-
-int16_t readAngle(){
-  int16_t i = -1;
-  length = sizeof(int16_t);
-  if (write(file_i2c, &i, length) != length)
-    printf("Failed to write to the i2c bus.\n");
-  usleep(50*1000); // write -1 not send to servo -> i2c ~300 us + wait time
-  unsigned char buf[32];
-  int16_t angle;
-  length = 2;
-  if (read(file_i2c,buf, length) != length)
-    printf("Failed to read from the i2c bus.\n");
-  angle = buf[0] | buf[1]<<8;
-  angle -= 375;//350 = centered                                                                                     
-  angle = angle * (240./1000.);
-  printf("read angle: %d\n",angle);
-  return angle;//check for returning of 53 degrees or 597 in their system                                           
-}
-void* moveServo(void *arg){
-  while(true){
-    setAngle(setServoAngle);
-    usleep(20*1000);
-    
-    int readTest = readAngle();
-    if(readTest != 53)
-      readServoAngle = readTest;
-    usleep(20*1000);
-    
-  }
-}
-*/
 
 
 void* drive(void* arg){
   Position* pos = (Position*) arg;
   bool init = true;
+  Clock clock;
   double angle2Local;
   int counter12 = 0;
   while(true){
@@ -465,24 +422,22 @@ void* drive(void* arg){
       angle2Local = pos->angle2;
       pthread_mutex_unlock(&targetMutex);
     }
-    /*
     if(buttonPress == 1){
-      setServoAngle = -angle2Local;
-    }
-    */
-    if(/*pos->dist>75 && */buttonPress == 1){
       pos->speed = 0.0;
-      if(turn>=0)
+      /*if(turn>=0)
 	pos->turn = std::min(sqrt(abs(turn/1.5)),0.7);
       else
 	pos->turn = std::max(-sqrt(abs(turn/1.5)),-0.7);
-      if(counter12++ % 50 == 0)
-	printf("turn: %.2f angle: %.2f ; gyro %.2f\n",pos->turn,pos->angle,gyroAngle);
+      */
+      pos->turn = turn;
     }else{
       pos->speed = 0.0;
       pos->turn = 0.0;
     }
-    
+    if(clock.getTimeAsMillis()>500){
+      printf("turn: %.2f angle: %.2f ; gyro %.2f\n",pos->turn,pos->angle,gyroAngle);
+      clock.restart();
+    }
     if(updated){
       driveAngle = alphaGlobal+(-gyroAngle); // calculate the needed position for the turn
       updated = false;
@@ -494,22 +449,25 @@ void* drive(void* arg){
 
 void* movePID(void* arg){
   PID* drivePID;
-  struct timeval tnew, told;
+  Clock clock;
   double turnLoc, dt;
-  drivePID = new PID(0.0,1,-1, 0.01,0.005,0.0005); // 0.01,0.005,0.0
+  if(PIDInit[0]==-1)
+    PIDInit[0]=0.01;
+  if(PIDInit[1]==-1)
+    PIDInit[1]=0.005;
+  if(PIDInit[2]==-1)
+    PIDInit[2]=0.03;
+  
+  drivePID = new PID(0.0,1,-1, PIDInit[0],PIDInit[1],PIDInit[2]); // 0.01,0.005,0.0
   
   while(true){
-    gettimeofday(&tnew,NULL);
-    dt = (tnew.tv_usec-told.tv_usec+1000000 * (tnew.tv_sec - told.tv_sec))*1e-6;
-    //printf("dt: %.2f\n",dt);
-    if(told.tv_sec==0)
-      dt = 0.1;
-    turnLoc = 0;
-    
+    dt = clock.getTimeAsMicros();
+    clock.restart();
+    //printf("dt: %f\n",dt);
     drivePID->button(buttonPress);
+    //turnLoc = 0;
     turnLoc = drivePID->calculate(driveAngle,-gyroAngle,dt,&P,&I,&D);
     turn = turnLoc;
-    told = tnew;
     usleep(10*1000);
   }
 }
@@ -575,9 +533,9 @@ void* USBSlave(void* arg){
     }
     //printf("line=%s\n",line);
     float roll, pitch, yaw;
-    float ACCX,ACCY,ROLL,PITCH,GYROZ,AAZ;
+    float ACCX,ACCY,GYROZ,AAZ;
     //sscanf(line,"%f,%f,%f",&roll,&pitch,&yaw);
-    sscanf(line,"%f %f %f %f %f %f %f",&ACCX,&ACCY,&ROLL,&PITCH,&yaw,&GYROZ,&AAZ);
+    sscanf(line,"%f %f %f %f %f %f %f",&ACCX,&ACCY,&roll,&pitch,&yaw,&GYROZ,&AAZ);
     if(GYROZ > 100)
       printf("yaw: %.2f; GYROZ: %.2f\n",yaw,GYROZ);
     gyroAngle=yaw;
@@ -585,13 +543,10 @@ void* USBSlave(void* arg){
 }
 
 int main(int argc, const char* argv[]){
-  int frFound = 0;
-  int frLost = 0;
   Clock clock, between;
   bool printTimeMain = false;
   //double deltaGyro, prevGyro = 0;
   Switches switches;
-  //switches.SERVO = false;
   switches.SHOWORIG = false;
   switches.SHOWHUE = false;
   switches.SHOWTRESH = false;
@@ -599,7 +554,6 @@ int main(int argc, const char* argv[]){
   switches.USESERVER = false;
   switches.USECOLOR = false;
   switches.DOPRINT = false;
-  //switches.TURNCAM = false;
   if(argc>=2){
     std::string args = argv[1];
     std::vector<char> token;
@@ -612,10 +566,9 @@ int main(int argc, const char* argv[]){
       printf("-b black and white\n");
       printf("-p print stuff\n");
       printf("param 2:\n");
-      printf("-qdebug=\n");
-      printf("-ptime=\n");
-      //printf("-r use the servo\n");
-      //printf("-a turn cam");
+      printf("qdebug=\n");
+      printf("ptime=\n");
+      printf("  1=main loop\n  2=findTarget loop\n");
       return 0;
     }
     for(int i=1;i<(int)args.size();i++)
@@ -636,21 +589,31 @@ int main(int argc, const char* argv[]){
 	switches.SHOWTRESH = true; break;
       case 'p':
 	switches.DOPRINT = true; break;
-	//case 'r':
-	//switches.SERVO = true; break;
-	//case 'a':
-	//switches.TURNCAM = true; break;
       }  
     }
     if(argc>=3){
-      std::string arg2(argv[2]);
-      if(arg2.substr(0,8).compare("-qdebug=")==0 && arg2.size()>=9){
-	qdebug = std::stoi(arg2.substr(8));
-	printf("set qdebug to %d\n",qdebug);
-      }
-      else if(arg2.substr(0,7).compare("-ptime=")==0 && arg2.size()>=8){
-	printTime = std::stoi(arg2.substr(7));
-	printf("set printTime to %d\n",printTime);
+      for(int a=3;a<=argc;a++){
+	std::string arg2(argv[a-1]);
+	if(arg2.substr(0,7).compare("qdebug=")==0 && arg2.size()>=8){
+	  qdebug = std::stoi(arg2.substr(7));
+	  printf("set qdebug to %d\n",qdebug);
+	}
+	else if(arg2.substr(0,6).compare("ptime=")==0 && arg2.size()>=7){
+	  printTime = std::stoi(arg2.substr(6));
+	  printf("set printTime to %d\n",printTime);
+	}
+	else if(arg2.substr(0,2).compare("P=")==0 && arg2.size()>=3){
+	  PIDInit[0] = std::stof(arg2.substr(2));
+	  printf("set P to %f\n",PIDInit[0]);
+	}
+	else if(arg2.substr(0,2).compare("I=")==0 && arg2.size()>=3){
+	  PIDInit[1] = std::stof(arg2.substr(2));
+	  printf("set I to %f\n",PIDInit[1]);
+	}
+	else if(arg2.substr(0,2).compare("D=")==0 && arg2.size()>=3){
+	  PIDInit[2] = std::stof(arg2.substr(2));
+	  printf("set D to %f\n",PIDInit[2]);
+	}
       }
     }
   }
@@ -675,14 +638,8 @@ int main(int argc, const char* argv[]){
   gettimeofday(&lostAtTime,NULL);
   
   Mat img, HSV, thresholded, output;
-  bool resetCam = true;
   gyroAngle = 0;
   driveAngle = 0;
-  srand(time(NULL));
-  //if(switches.SERVO){
-  //pthread_create(&moveServoThread,NULL,moveServo, NULL);
-  //pthread_setname_np(moveServoThread,"MoveServoThread");
-  //}
   gettimeofday(&t1, NULL);
   gettimeofday(&timeTest,NULL);
   videoPort=4097;
@@ -763,7 +720,7 @@ int main(int argc, const char* argv[]){
       nullifyStruct(position);
       //printf("checking %d==1?\n",nt);
       if (nt==1){
-	printf("updated\n");
+	printf("updated %.2f\n",clock.getTimeAsMillis());
 	findAnglePnP(img,target,&position);
 	if(printTimeMain){
 	  printf(" solvePnP    %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
@@ -806,22 +763,19 @@ int main(int argc, const char* argv[]){
 	
 
 	//====UPDATES====
-
+	//setting global alpha Value
 	alphaGlobal = positionAV.angle;
-	//deltaGyro = gyroAngle - prevGyro;
-	//driveAngle = alphaGlobal+(-gyroAngle)+(-readServoAngle);//+(-positionAV.angle2); // calculate the needed position for the turn
-	//prevGyro = gyroAngle;
 
 	// set PID args to send to server;
 	positionAV.P=P;
 	positionAV.I=I;
 	positionAV.D=D;
-
-	if(switches.DOPRINT) printf("angles: alpha: %4.2f, alpha2: %4.2f, readServoAngle: %d, gyro: %4.2f\n",positionAV.angle,positionAV.angle2,readServoAngle,gyroAngle);
+	
+	//all values and fr has been updated;
 	updated = true;
 
 	
-	if(qdebug > 4){
+	if(qdebug > 3){
 	  std::cout << "" << std::endl;
 	  std::cout << "/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*" << std::endl;
 	}
@@ -831,7 +785,7 @@ int main(int argc, const char* argv[]){
 	}
 
       }else{
-	nullifyStruct(positionAV);
+	//nullifyStruct(positionAV);
 	positionAV.z=-1;
 	missFR++;
 
@@ -864,7 +818,7 @@ int main(int argc, const char* argv[]){
 
       
       if(switches.DOPRINT)
-	printf("x=%.2f, z=%.2f, dist=%.2f, angle=%.2f, angle2=%.2f, OffSetx=%.2f, speed=%.2f, turn=%.2f, gyro=%.2f\n",position.x,position.z,position.dist,position.angle,position.angle2,position.OffSetx,position.speed,position.turn,position.gyro);
+	printf("x=%.2f, z=%.2f, dist=%.2f, angle=%.2f, angle2=%.2f, speed=%.2f, turn=%.2f, gyro=%.2f\n",position.x,position.z,position.dist,position.angle,position.angle2,position.speed,position.turn,position.gyro);
       pthread_mutex_unlock(&targetMutex);
       totalfound.clear();
       counter++;
@@ -872,15 +826,20 @@ int main(int argc, const char* argv[]){
 	printf("--finalTime: %.2f\n",clock.getTimeAsMillis());
       }
     }//end of check for new frame
-    else pthread_mutex_unlock(&frameMutex);
+    else
+      pthread_mutex_unlock(&frameMutex);
+
+    
     counter2++;
     if(counter%10==0 && counter != counter_old){
       counter_old = counter;
+      //could be replaced by Clock
       gettimeofday(&t2,NULL);
       double dt = t2.tv_usec-t1.tv_usec+1000000 * (t2.tv_sec - t1.tv_sec);
       t1=t2;
+      
       printf("------ Frame rate: %f fr/s (%f) \n",10./dt*1e6,counter2/dt*1e6); counter2=0;
-      printf("------ Miss Frame: %d fr/s \n",missFR);
+      printf("------ Miss Frame: %d fr \n",missFR);
       missFR=0;
       if(switches.USESERVER && remoteSocket>0){
 	int bytes = 0;
@@ -909,7 +868,6 @@ int main(int argc, const char* argv[]){
     
     if(switches.SHOWORIG || switches.SHOWHUE || switches.SHOWTRESH || switches.SHOWTRACK)
       waitKey(5);
-    //printf("wait?\n");
     newFrame = false;
     usleep(100);
   }

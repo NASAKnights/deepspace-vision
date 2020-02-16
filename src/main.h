@@ -21,6 +21,7 @@
 #include <pigpio.h>
 typedef struct {
   double x;
+  double y;
   double z;
   double dist;
   double angle;
@@ -53,7 +54,7 @@ public:
   int offby;
   cv::RotatedRect rect;
   cv::Rect boundingRect;
-  cv::Point2f points[4];
+  cv::Point2d points[4];
   void NullTargets()
   {
     status = 0;
