@@ -20,7 +20,7 @@ using namespace cv;
 
 bool firstTimeTest = true;
 int printTime = 0;
-
+double minMotor = 0;
 
 //Editable
 double MinRatio = 0.1;
@@ -191,7 +191,7 @@ int findTarget(Mat original, Mat thresholded, Targets *targets){
   double qualityLevel = 0.05;
   double minDistance = 50;
   int blockSize = 3;
-  bool useHarisDetector = false;
+  bool useHarisDetector = true;
   double k = 0.04;//0.04
   int maxCorners = 4;
 
@@ -299,7 +299,7 @@ int findTarget(Mat original, Mat thresholded, Targets *targets){
       targets[i].rect = minRect[i];
       targets[i].boundingRect = minRect[i].boundingRect();
       if(printTimeTarget){
-	printf(" findRct     %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
+	printf(" findRct      %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
 	between.restart();
       }
       bool flag= false;
@@ -319,7 +319,7 @@ int findTarget(Mat original, Mat thresholded, Targets *targets){
 	circle(original, rect_points[j],3,RED,-1,8,0);
       }
       if(printTimeTarget){
-	printf(" drawRct     %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
+	printf(" drawRct      %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
 	between.restart();
       }
       convexHull(contours[i],hull[i]);
@@ -336,7 +336,7 @@ int findTarget(Mat original, Mat thresholded, Targets *targets){
 	printf(" ratio test   %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
 	between.restart();
       }
-      approxPolyDP(hull[i],approx,arcLength(hull[i],true)*0.015,true);//0.025
+      approxPolyDP(hull[i],approx,arcLength(hull[i],true)*0.015,true);//0.015
       if(printTimeTarget){
 	printf(" after poly   %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
 	between.restart();
@@ -422,18 +422,18 @@ void* drive(void* arg){
     }
     if(buttonPress == 1){
       pos->speed = 0.0;
-      /*if(turn>=0)
+      if(turn>=0)
 	pos->turn = std::min(sqrt(abs(turn/1.5)),0.7);
       else
 	pos->turn = std::max(-sqrt(abs(turn/1.5)),-0.7);
-      */
-      pos->turn = turn;
+      
+      //pos->turn = turn;
     }else{
       pos->speed = 0.0;
       pos->turn = 0.0;
     }
-    if(clock.getTimeAsMillis()>500){
-      printf("turn: %.2f angle: %.2f ; gyro %.2f\n",pos->turn,pos->angle,gyroAngle);
+    if(clock.getTimeAsMillis()>100){
+      printf("turn: %5.2f angle: %6.2f ; P %5.2f, I %5.2f, D %5.2f                     gyro: %7.2f\n",pos->turn,pos->angle,P,I,D,gyroAngle);
       clock.restart();
     }
     if(updated){
@@ -450,11 +450,11 @@ void* movePID(void* arg){
   Clock clock;
   double turnLoc, dt;
   if(PIDInit[0]==-1)
-    PIDInit[0]=0.01;
+    PIDInit[0]=0.008;
   if(PIDInit[1]==-1)
-    PIDInit[1]=0.005;
+    PIDInit[1]=0.0;
   if(PIDInit[2]==-1)
-    PIDInit[2]=0.03;
+    PIDInit[2]=0.002;
   
   drivePID = new PID(0.0,1,-1, PIDInit[0],PIDInit[1],PIDInit[2]); // 0.01,0.005,0.0
   
@@ -612,6 +612,10 @@ int main(int argc, const char* argv[]){
 	  PIDInit[2] = std::stof(arg2.substr(2));
 	  printf("set D to %f\n",PIDInit[2]);
 	}
+	else if(arg2.substr(0,5).compare("mMin=")==0 && arg2.size()>=6){
+	  minMotor = std::stof(arg2.substr(6));
+	  printf("set minMotor to %f\n",minMotor);
+	}
       }
     }
   }
@@ -718,7 +722,7 @@ int main(int argc, const char* argv[]){
       nullifyStruct(position);
       //printf("checking %d==1?\n",nt);
       if (nt==1){
-	printf("updated %.2f\n",clock.getTimeAsMillis());
+	//printf("updated %.2f\n",clock.getTimeAsMillis());
 	findAnglePnP(img,target,&position);
 	if(printTimeMain){
 	  printf(" solvePnP    %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
@@ -816,7 +820,7 @@ int main(int argc, const char* argv[]){
 
       
       if(switches.DOPRINT)
-	printf("x=%.2f, z=%.2f, dist=%.2f, angle=%.2f, angle2=%.2f, speed=%.2f, turn=%.2f, gyro=%.2f\n",position.x,position.z,position.dist,position.angle,position.angle2,position.speed,position.turn,position.gyro);
+	printf("x=%6.2f, z=%6.2f, dist=%6.2f, angle=%6.2f, angle2=%6.2f, speed=%4.2f, turn=%5.2f, gyro=%7.2f\n",position.x,position.z,position.dist,position.angle,position.angle2,position.speed,position.turn,position.gyro);
       pthread_mutex_unlock(&targetMutex);
       totalfound.clear();
       counter++;
@@ -836,8 +840,8 @@ int main(int argc, const char* argv[]){
       double dt = t2.tv_usec-t1.tv_usec+1000000 * (t2.tv_sec - t1.tv_sec);
       t1=t2;
       
-      printf("------ Frame rate: %f fr/s (%f) \n",10./dt*1e6,counter2/dt*1e6); counter2=0;
-      printf("------ Miss Frame: %d fr \n",missFR);
+      //printf("------ Frame rate: %f fr/s (%f) \n",10./dt*1e6,counter2/dt*1e6); counter2=0;
+      //printf("------ Miss Frame: %d fr \n",missFR);
       missFR=0;
       if(switches.USESERVER && remoteSocket>0){
 	int bytes = 0;

@@ -30,6 +30,9 @@ void PID::button(int buttonState){
   if(buttonState==1 && oldState == 0){
     _integral=0;
     _pre_error=0;
+    for(unsigned int i=0;i<arrLen;i++)
+      error_arr[i] = 0;
+    
   }
   oldState=buttonState;
 }
