@@ -92,6 +92,7 @@ const std::string trackbarWindowName = "Trackbars";
 std::vector <Point>totalfound;
 const Scalar BLUE = Scalar(255, 0, 0), RED = Scalar(0,0,255), YELLOW = Scalar(0,255,255), GREEN = Scalar(0,255,0);
 
+double OffSetX = 0;
 int remoteSocket = 0;
 int videoPort;
 int videoError = 0;
@@ -370,6 +371,9 @@ int findTarget(Mat original, Mat thresholded, Targets *targets){
 	printf(" goodFeatures %.2f tot: %.2f\n",between.getTimeAsMillis(),clock.getTimeAsMillis());
 	between.restart();
       }
+      
+      OffSetX = 320-(corners[0].x+corners[1].x+corners[2].x+corners[3].x)/4.;
+      
       //cv::cornerHarris(workingImage,corners,); // test this out instead?
       target.corners.clear();
       target.corners.push_back(corners[0]);
@@ -465,6 +469,7 @@ void* movePID(void* arg){
     drivePID->button(buttonPress);
     //turnLoc = 0;
     turnLoc = drivePID->calculate(driveAngle,-gyroAngle,dt,&P,&I,&D);
+    //turnLoc = drivePID->calculate(0,OffSetX,dt,&P,&I,&D);
     turn = turnLoc;
     usleep(10*1000);
   }
@@ -767,7 +772,6 @@ int main(int argc, const char* argv[]){
 	//====UPDATES====
 	//setting global alpha Value
 	alphaGlobal = positionAV.angle;
-
 	// set PID args to send to server;
 	positionAV.P=P;
 	positionAV.I=I;
@@ -820,7 +824,7 @@ int main(int argc, const char* argv[]){
 
       
       if(switches.DOPRINT)
-	printf("x=%6.2f, z=%6.2f, dist=%6.2f, angle=%6.2f, angle2=%6.2f, speed=%4.2f, turn=%5.2f, gyro=%7.2f\n",position.x,position.z,position.dist,position.angle,position.angle2,position.speed,position.turn,position.gyro);
+	printf("x=%6.2f, z=%6.2f, dist=%6.2f, angle=%6.2f, OffSetX=%7.2f, angle2=%6.2f, speed=%4.2f, turn=%5.2f, gyro=%7.2f\n",position.x,position.z,position.dist,position.angle,OffSetX,position.angle2,position.speed,position.turn,position.gyro);
       pthread_mutex_unlock(&targetMutex);
       totalfound.clear();
       counter++;
